@@ -8,6 +8,8 @@ edition = "2021"
 [dependencies]
 winit = "0.27"
 anyhow = { version = "1.0", features=["backtrace"] }
+env_logger = "0.10"
+log = "0.4"
 raw-window-handle = "0.5"
 mltg = { path="./lib/mltg" }
 win_desktop_duplication = { path="./lib/win_desktop_duplication" }

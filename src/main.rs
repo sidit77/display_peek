@@ -1,3 +1,4 @@
+use log::LevelFilter;
 use raw_window_handle::HasRawWindowHandle;
 use win_desktop_duplication::{co_init, DesktopDuplicationApi, set_process_dpi_awareness};
 use win_desktop_duplication::devices::AdapterFactory;
@@ -5,6 +6,13 @@ use winit::{dpi::*, event::*, event_loop::*, window::*};
 use winit::platform::windows::WindowBuilderExtWindows;
 
 fn main() -> anyhow::Result<()> {
+    env_logger::builder()
+        .filter_level(LevelFilter::Trace)
+        .filter(Some("win_desktop_duplication::duplication"), LevelFilter::Warn)
+        .format_timestamp(None)
+        //.format_target(false)
+        .init();
+
     set_process_dpi_awareness();
     co_init();
 
