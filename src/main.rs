@@ -11,7 +11,7 @@ use winit::platform::windows::WindowBuilderExtWindows;
 fn main() -> anyhow::Result<()> {
     env_logger::builder()
         .filter_level(LevelFilter::Trace)
-        .filter(Some("win_desktop_duplication::duplication"), LevelFilter::Warn)
+        .filter(Some("win_desktop_duplication::duplication"), LevelFilter::Trace)
         .format_timestamp(None)
         //.format_target(false)
         .init();
@@ -39,6 +39,7 @@ fn main() -> anyhow::Result<()> {
         window.raw_window_handle(),
         (window_size.width, window_size.height),
     )?;
+    let mut fps = fps_counter::FPSCounter::new();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -63,6 +64,7 @@ fn main() -> anyhow::Result<()> {
                                             _ => Interpolation::HighQualityCubic
                                         });
                     }).unwrap();
+                    window.set_title(&format!("{} fps", fps.tick()))
                 }
 
             },
