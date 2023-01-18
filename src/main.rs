@@ -40,17 +40,6 @@ fn main() -> anyhow::Result<()> {
         (window_size.width, window_size.height),
     )?;
 
-    const FILTER_MODES: &[Interpolation] = &[
-        Interpolation::NearestNeighbor,
-        Interpolation::Linear,
-        Interpolation::MultiSampleLinear,
-        Interpolation::Cubic,
-        Interpolation::HighQualityCubic,
-        Interpolation::Anisotropic,
-    ];
-
-    let mut filter_mode = 3;
-
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         match event {
@@ -69,13 +58,16 @@ fn main() -> anyhow::Result<()> {
                                         mltg::Rect::new((0.5 * (window_size.width - width), 0.5 * (window_size.height - height)),
                                                         (width, width / aspect)),
                                         None,
-                                        FILTER_MODES[filter_mode]);
+                                        match height / tex.desc().height as f32 {
+                                            r if r > 0.6 => Interpolation::Cubic,
+                                            _ => Interpolation::HighQualityCubic
+                                        });
                     }).unwrap();
                 }
 
             },
             Event::MainEventsCleared => {
-                output.wait_for_vsync().unwrap();
+                //output.wait_for_vsync().unwrap();
                 window.request_redraw();
             }
             Event::WindowEvent {
@@ -89,17 +81,6 @@ fn main() -> anyhow::Result<()> {
                 event: WindowEvent::KeyboardInput { input: KeyboardInput{
                     state: ElementState::Pressed,
                     virtual_keycode: Some(VirtualKeyCode::F1),
-                    ..
-                }, .. },
-                ..
-            } => {
-                filter_mode = (filter_mode + 1) % FILTER_MODES.len();
-                log::info!("Current Filter Mode: {:?}", FILTER_MODES[filter_mode])
-            }
-            Event::WindowEvent {
-                event: WindowEvent::KeyboardInput { input: KeyboardInput{
-                    state: ElementState::Pressed,
-                    virtual_keycode: Some(VirtualKeyCode::F2),
                     ..
                 }, .. },
                 ..
