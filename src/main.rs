@@ -1,4 +1,7 @@
+#![windows_subsystem = "windows"]
+
 use log::LevelFilter;
+use mltg::Interpolation;
 use raw_window_handle::HasRawWindowHandle;
 use win_desktop_duplication::{co_init, DesktopDuplicationApi, set_process_dpi_awareness};
 use win_desktop_duplication::devices::AdapterFactory;
@@ -23,7 +26,8 @@ fn main() -> anyhow::Result<()> {
         .with_inner_size(LogicalSize::new(1280, 720))
         .build(&event_loop)?;
     let adapter = AdapterFactory::new().get_adapter_by_idx(0).unwrap();
-    let output = adapter.get_display_by_idx(0).unwrap();
+    let mut display_iter = adapter.iter_displays().cycle();
+    let output = display_iter.next().unwrap();
 
     let mut dupl = DesktopDuplicationApi::new(adapter, output.clone()).unwrap();
     let (device, _) = dupl.get_device_and_ctx();
@@ -36,6 +40,17 @@ fn main() -> anyhow::Result<()> {
         (window_size.width, window_size.height),
     )?;
 
+    const FILTER_MODES: &[Interpolation] = &[
+        Interpolation::NearestNeighbor,
+        Interpolation::Linear,
+        Interpolation::MultiSampleLinear,
+        Interpolation::Cubic,
+        Interpolation::HighQualityCubic,
+        Interpolation::Anisotropic,
+    ];
+
+    let mut filter_mode = 3;
+
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         match event {
@@ -47,10 +62,14 @@ fn main() -> anyhow::Result<()> {
                     ctx.set_scale_factor(window.scale_factor() as _);
                     ctx.draw(&render_target, |cmd| {
                         cmd.clear((0.0, 0.0, 0.3, 0.0));
+                        let aspect = tex.desc().width as f32 / tex.desc().height as  f32;
+                        let width = window_size.width.min(window_size.height * aspect);
+                        let height = width / aspect;
                         cmd.draw_bitmap(&factory.create_bitmap(tex.as_raw_ref()).unwrap(),
-                                        mltg::Rect::from_points((10.0, 10.0), (window_size.width - 10.0, window_size.height - 10.0)),
+                                        mltg::Rect::new((0.5 * (window_size.width - width), 0.5 * (window_size.height - height)),
+                                                        (width, width / aspect)),
                                         None,
-                                        mltg::Interpolation::HighQualityCubic);
+                                        FILTER_MODES[filter_mode]);
                     }).unwrap();
                 }
 
@@ -65,6 +84,29 @@ fn main() -> anyhow::Result<()> {
             } => {
                 ctx.resize_target(&mut render_target, (size.width, size.height))
                     .unwrap();
+            }
+            Event::WindowEvent {
+                event: WindowEvent::KeyboardInput { input: KeyboardInput{
+                    state: ElementState::Pressed,
+                    virtual_keycode: Some(VirtualKeyCode::F1),
+                    ..
+                }, .. },
+                ..
+            } => {
+                filter_mode = (filter_mode + 1) % FILTER_MODES.len();
+                log::info!("Current Filter Mode: {:?}", FILTER_MODES[filter_mode])
+            }
+            Event::WindowEvent {
+                event: WindowEvent::KeyboardInput { input: KeyboardInput{
+                    state: ElementState::Pressed,
+                    virtual_keycode: Some(VirtualKeyCode::F2),
+                    ..
+                }, .. },
+                ..
+            } => {
+                let display = display_iter.next().unwrap();
+                dupl.switch_output(display.clone()).unwrap();
+                log::info!("Current Display: {:?}", display.name());
             }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
