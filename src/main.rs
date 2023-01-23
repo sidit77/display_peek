@@ -30,17 +30,21 @@ fn main() -> anyhow::Result<()> {
     let output = display_iter.next().unwrap();
 
     let ctx = mltg::Context::new(mltg::Direct2D::new(adapter.as_raw_ref())?)?;
-    let mut dupl = DesktopDuplicationApi::new_with(ctx.backend.d3d11_device.clone(), ctx.backend.d3d11_ctx.clone(), output.clone()).unwrap();
-
-
     let factory = ctx.create_factory();
+
+    let mut dupl = DesktopDuplicationApi::new_with(
+        ctx.backend.d3d11_device.clone(),
+        ctx.backend.d3d11_ctx.clone(),
+        ctx.d2d1_device_context.clone(),
+        output.clone()).unwrap();
+
+
+
     let window_size = window.inner_size();
     let mut render_target = ctx.create_render_target(
         window.raw_window_handle(),
         (window_size.width, window_size.height),
     )?;
-
-    let white_brush = factory.create_solid_color_brush((1.0, 0.0, 1.0, 1.0))?;
 
     let mut fps = fps_counter::FPSCounter::new();
 
@@ -66,8 +70,10 @@ fn main() -> anyhow::Result<()> {
                                             r if r > 0.6 => Interpolation::Cubic,
                                             _ => Interpolation::HighQualityCubic
                                         });
-                        if let Some(cursor) = dupl.get_cursor() {
-                            cmd.fill(&Rect::new((x + scale * cursor.x as f32, y + scale * cursor.y as f32), (8.0,8.0)), &white_brush);
+                        if let Some((cursor, bitmap)) = dupl.get_cursor() {
+                            let size = unsafe { bitmap.GetSize() };
+                            cmd.draw_bitmap(bitmap, Rect::new((x + scale * cursor.x as f32, y + scale * cursor.y as f32), (size.width * scale,size.height * scale)), None, Interpolation::HighQualityCubic);
+                            //cmd.fill(&Rect::new((x + scale * cursor.x as f32, y + scale * cursor.y as f32), (8.0,8.0)), &white_brush);
                         }
                     }).unwrap();
                 }
