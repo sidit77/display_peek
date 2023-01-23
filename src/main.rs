@@ -76,7 +76,11 @@ fn main() -> anyhow::Result<()> {
                                 CursorType::Color(bitmap) => {
                                     cmd.draw_bitmap2(bitmap, (cursor.x as f32, cursor.y as f32), interpolation, CompositeMode::SourceOver);
                                 }
-                                CursorType::Monocrome(and, xor) => {
+                                CursorType::Monochrome(and, xor) => {
+                                    cmd.draw_bitmap2(and, (cursor.x as f32, cursor.y as f32), interpolation, CompositeMode::SourceOver);
+                                    cmd.draw_bitmap2(xor, (cursor.x as f32, cursor.y as f32), interpolation, CompositeMode::MaskInvert);
+                                },
+                                CursorType::MaskedColor(and, xor) => {
                                     cmd.draw_bitmap2(and, (cursor.x as f32, cursor.y as f32), interpolation, CompositeMode::SourceOver);
                                     cmd.draw_bitmap2(xor, (cursor.x as f32, cursor.y as f32), interpolation, CompositeMode::MaskInvert);
                                 }
