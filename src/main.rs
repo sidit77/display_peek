@@ -1,9 +1,9 @@
 #![windows_subsystem = "windows"]
 
 use log::LevelFilter;
-use mltg::{Interpolation, Rect};
+use mltg::{CompositeMode, Interpolation};
 use raw_window_handle::HasRawWindowHandle;
-use win_desktop_duplication::{co_init, DesktopDuplicationApi, set_process_dpi_awareness};
+use win_desktop_duplication::{co_init, CursorType, DesktopDuplicationApi, set_process_dpi_awareness};
 use win_desktop_duplication::devices::AdapterFactory;
 use winit::{dpi::*, event::*, event_loop::*, window::*};
 use winit::platform::windows::WindowBuilderExtWindows;
@@ -63,17 +63,24 @@ fn main() -> anyhow::Result<()> {
                         let x = 0.5 * (window_size.width - width);
                         let y = 0.5 * (window_size.height - height);
                         let scale = height / tex.desc().height as f32;
-                        cmd.draw_bitmap(&factory.create_bitmap(tex.as_raw_ref()).unwrap(),
-                                        mltg::Rect::new((x, y), (width, height)),
-                                        None,
-                                        match scale {
-                                            r if r > 0.6 => Interpolation::Cubic,
-                                            _ => Interpolation::HighQualityCubic
-                                        });
-                        if let Some((cursor, bitmap)) = dupl.get_cursor() {
-                            let size = unsafe { bitmap.GetSize() };
-                            cmd.draw_bitmap(bitmap, Rect::new((x + scale * cursor.x as f32, y + scale * cursor.y as f32), (size.width * scale,size.height * scale)), None, Interpolation::HighQualityCubic);
-                            //cmd.fill(&Rect::new((x + scale * cursor.x as f32, y + scale * cursor.y as f32), (8.0,8.0)), &white_brush);
+                        let interpolation = if scale > 0.6 {
+                            Interpolation::Cubic
+                        } else {
+                            Interpolation::HighQualityCubic
+                        };
+                        cmd.set_transform(x, y, scale);
+                        cmd.draw_bitmap2(&factory.create_bitmap(tex.as_raw_ref()).unwrap(), (0.0,0.0), interpolation, CompositeMode::SourceOver);
+
+                        if let Some((cursor, cursor_type)) = dupl.get_cursor() {
+                            match cursor_type {
+                                CursorType::Color(bitmap) => {
+                                    cmd.draw_bitmap2(bitmap, (cursor.x as f32, cursor.y as f32), interpolation, CompositeMode::SourceOver);
+                                }
+                                CursorType::Monocrome(and, xor) => {
+                                    cmd.draw_bitmap2(and, (cursor.x as f32, cursor.y as f32), interpolation, CompositeMode::SourceOver);
+                                    cmd.draw_bitmap2(xor, (cursor.x as f32, cursor.y as f32), interpolation, CompositeMode::MaskInvert);
+                                }
+                            }
                         }
                     }).unwrap();
                 }
