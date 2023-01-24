@@ -5,8 +5,40 @@ use mltg::{CompositeMode, Interpolation};
 use raw_window_handle::HasRawWindowHandle;
 use win_desktop_duplication::{co_init, CursorType, DesktopDuplicationApi, set_process_dpi_awareness};
 use win_desktop_duplication::devices::AdapterFactory;
-use winit::{dpi::*, event::*, event_loop::*, window::*};
+use windows_sys::Win32::Foundation::{LPARAM, LRESULT, POINT, RECT, TRUE, WPARAM};
+use windows_sys::Win32::Graphics::Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MonitorFromPoint, MONITORINFO};
+use windows_sys::Win32::UI::WindowsAndMessaging::{CallNextHookEx, MSLLHOOKSTRUCT, SetWindowsHookExW, UnhookWindowsHookEx, WH_MOUSE_LL, WM_MOUSEMOVE};
+use winit::{dpi::*, event::*, event_loop::*, monitor, window::*};
 use winit::platform::windows::WindowBuilderExtWindows;
+
+static mut LAST_MONITOR: Option<MONITORINFO> = None;
+
+fn contains(rect: RECT, pt: POINT) -> bool {
+    pt.x >= rect.left && pt.x <= rect.right &&
+    pt.y >= rect.top  && pt.y <= rect.bottom
+}
+
+unsafe extern "system" fn ll_mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    if wparam as u32 == WM_MOUSEMOVE {
+        let event = (lparam as *const MSLLHOOKSTRUCT).read();
+        if LAST_MONITOR.map(|m| !contains(m.rcMonitor, event.pt)).unwrap_or(true) {
+            let monitor = MonitorFromPoint(event.pt, MONITOR_DEFAULTTONEAREST);
+            let mut info = MONITORINFO{
+                cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+                ..std::mem::zeroed()
+            };
+            if GetMonitorInfoW(monitor, &mut info) == TRUE{
+                //println!("bottom: {}", info.rcMonitor.bottom);
+                //println!("top: {}", info.rcMonitor.top);
+                //println!("left: {}", info.rcMonitor.left);
+                //println!("right: {}", info.rcMonitor.right);
+                println!("Switched to monitor {:?}", monitor);
+                LAST_MONITOR = Some(info);
+            }
+        }
+    }
+    CallNextHookEx(0, code, wparam, lparam)
+}
 
 fn main() -> anyhow::Result<()> {
     env_logger::builder()
@@ -24,6 +56,9 @@ fn main() -> anyhow::Result<()> {
         .with_title("mltg d2d")
         .with_drag_and_drop(false)
         .with_inner_size(LogicalSize::new(1280, 720))
+        //.with_decorations(false)
+        //.with_always_on_top(true)
+        //.with_skip_taskbar(true)
         .build(&event_loop)?;
     let adapter = AdapterFactory::new().get_adapter_by_idx(0).unwrap();
     let mut display_iter = adapter.iter_displays().cycle();
@@ -47,6 +82,8 @@ fn main() -> anyhow::Result<()> {
     )?;
 
     let mut fps = fps_counter::FPSCounter::new();
+
+    let hook = unsafe { SetWindowsHookExW(WH_MOUSE_LL, Some(ll_mouse_proc), 0, 0) };
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -116,10 +153,23 @@ fn main() -> anyhow::Result<()> {
                 log::info!("Current Display: {:?}", display.name());
             }
             Event::WindowEvent {
+                event: WindowEvent::KeyboardInput { input: KeyboardInput{
+                    state: ElementState::Pressed,
+                    virtual_keycode: Some(VirtualKeyCode::Escape),
+                    ..
+                }, .. },
+                ..
+            } => {
+                *control_flow = ControlFlow::Exit;
+            }
+            Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 ..
             } => {
                 *control_flow = ControlFlow::Exit;
+            },
+            Event::LoopDestroyed => {
+                unsafe { UnhookWindowsHookEx(hook);}
             }
             _ => {}
         }
