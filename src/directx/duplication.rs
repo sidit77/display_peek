@@ -16,7 +16,7 @@ use crate::utils::U8Iter;
 pub struct DesktopDuplicationApi {
     d3d_device: ID3D11Device4,
     d3d_ctx: ID3D11DeviceContext4,
-    d2d_ctx: ID2D1DeviceContext5,
+    //d2d_ctx: ID2D1DeviceContext5,
     output: Display,
     dupl: Option<IDXGIOutputDuplication>,
 
@@ -32,13 +32,13 @@ unsafe impl Sync for DesktopDuplicationApi {}
 
 
 impl DesktopDuplicationApi {
-    pub fn new_with(d3d_device: ID3D11Device, d3d_ctx: ID3D11DeviceContext4, d2d_ctx: ID2D1DeviceContext5, output: Display) -> Result<Self> {
+    pub fn new_with(d3d_device: ID3D11Device, d3d_ctx: ID3D11DeviceContext4, output: Display) -> Result<Self> {
         let d3d_device = d3d_device.cast()?;
         let dupl = Self::create_dupl_output(&d3d_device, &output)?;
         Ok(Self {
             d3d_device,
             d3d_ctx,
-            d2d_ctx,
+            //d2d_ctx,
             output,
             dupl: Some(dupl),
             options: Default::default(),
@@ -140,6 +140,7 @@ impl DesktopDuplicationApi {
         //unsafe { self.d3d_ctx.CopyResource(self.state.frame.as_ref().unwrap().as_raw_ref(), new_frame.as_raw_ref()); }
 
         //log::trace!("{:#?}", frame_info);
+        /*
         if frame_info.PointerShapeBufferSize != 0 {
             let mut used_size = 0;
             let mut shape: DXGI_OUTDUPL_POINTER_SHAPE_INFO = Default::default();
@@ -212,7 +213,7 @@ impl DesktopDuplicationApi {
 
             }
         }
-
+        */
         if frame_info.LastMouseUpdateTime != 0 {
             self.state.cursor_pos = if frame_info.PointerPosition.Visible.as_bool() {
                 Some(frame_info.PointerPosition.Position)
@@ -281,6 +282,7 @@ impl DesktopDuplicationApi {
         }
     }
 
+    /*
     fn create_cursor_bitmap(&self, width: u32, height: u32, ptr: *const core::ffi::c_void) -> ID2D1Bitmap {
         unsafe {
             self.d2d_ctx.CreateBitmap(
@@ -303,6 +305,7 @@ impl DesktopDuplicationApi {
 
     }
 
+     */
     /*
     fn ensure_cache_frame(&mut self, frame: &Texture) -> Result<()> {
         if self.state.frame.is_none() {

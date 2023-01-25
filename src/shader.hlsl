@@ -8,8 +8,8 @@ struct VSOutput {
     float2 uv: TEXCOORD0;
 };
 
-//Texture2D tex: register(t0);
-//SamplerState samp: register(s0);
+Texture2D tex: register(t0);
+SamplerState samp: register(s0);
 
 VSOutput vs_main(VSInput input) {
     VSOutput output;
@@ -19,5 +19,5 @@ VSOutput vs_main(VSInput input) {
 }
 
 float4 ps_main(VSOutput vs): SV_TARGET {
-    return float4(0.0, 0.0, 1.0, 1.0);//tex.Sample(samp, vs.uv);
+    return tex.Sample(samp, vs.uv);
 }

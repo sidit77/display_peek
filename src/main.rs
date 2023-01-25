@@ -18,9 +18,10 @@ use tao::menu::ContextMenu;
 use tao::platform::run_return::EventLoopExtRunReturn;
 use tao::platform::windows::{IconExtWindows, WindowBuilderExtWindows};
 use tao::system_tray::SystemTrayBuilder;
+use windows::core::Interface;
 use windows::s;
 use windows::Win32::Foundation::HWND;
-use windows::Win32::Graphics::Direct3D11::{D3D11_APPEND_ALIGNED_ELEMENT, D3D11_BIND_INDEX_BUFFER, D3D11_BIND_VERTEX_BUFFER, D3D11_BUFFER_DESC, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_CREATE_DEVICE_DEBUG, D3D11_CREATE_DEVICE_FLAG, D3D11_INPUT_ELEMENT_DESC, D3D11_INPUT_PER_VERTEX_DATA, D3D11_SDK_VERSION, D3D11_SUBRESOURCE_DATA, D3D11_USAGE_DEFAULT, D3D11_VIEWPORT, D3D11CreateDevice, ID3D11RenderTargetView, ID3D11Texture2D};
+use windows::Win32::Graphics::Direct3D11::{D3D11_APPEND_ALIGNED_ELEMENT, D3D11_BIND_INDEX_BUFFER, D3D11_BIND_VERTEX_BUFFER, D3D11_BUFFER_DESC, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_CREATE_DEVICE_DEBUG, D3D11_CREATE_DEVICE_FLAG, D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_INPUT_ELEMENT_DESC, D3D11_INPUT_PER_VERTEX_DATA, D3D11_SAMPLER_DESC, D3D11_SDK_VERSION, D3D11_SUBRESOURCE_DATA, D3D11_TEXTURE_ADDRESS_CLAMP, D3D11_USAGE_DEFAULT, D3D11_VIEWPORT, D3D11CreateDevice, ID3D11DeviceContext4, ID3D11RenderTargetView, ID3D11Texture2D};
 use windows::Win32::Graphics::Direct3D::{D3D_DRIVER_TYPE_HARDWARE, D3D_DRIVER_TYPE_UNKNOWN, D3D_FEATURE_LEVEL_11_1, D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST};
 use windows::Win32::Graphics::Direct3D::Fxc::D3DCompile;
 use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, DXGI_SCALING_NONE, DXGI_SWAP_CHAIN_DESC1, DXGI_SWAP_EFFECT_FLIP_DISCARD, DXGI_USAGE_RENDER_TARGET_OUTPUT, IDXGIFactory2};
@@ -87,25 +88,25 @@ fn main() -> anyhow::Result<()> {
             adapter.as_raw_ref(),
             D3D_DRIVER_TYPE_UNKNOWN,
             None,
-            D3D11_CREATE_DEVICE_DEBUG,//D3D11_CREATE_DEVICE_FLAG(0),
+            D3D11_CREATE_DEVICE_FLAG(0),
             Some(&[D3D_FEATURE_LEVEL_11_1]),
             D3D11_SDK_VERSION,
             Some(&mut d3d_device),
             None,
             Some(&mut d3d_ctx),
             )?;
-            (d3d_device.unwrap(), d3d_ctx.unwrap())
+            (d3d_device.unwrap(), d3d_ctx.unwrap().cast::<ID3D11DeviceContext4>()?)
     };
     /*
     let ctx = mltg::Context::new(mltg::Direct2D::new(adapter.as_raw_ref())?)?;
     let factory = ctx.create_factory();
+ */
 
     let mut dupl = DesktopDuplicationApi::new_with(
-        ctx.backend.d3d11_device.clone(),
-        ctx.backend.d3d11_ctx.clone(),
-        ctx.d2d1_device_context.clone(),
+        d3d_device.clone(),
+        d3d_ctx.clone(),
         output).unwrap();
-     */
+
     let dxgi_factory = unsafe { CreateDXGIFactory1::<IDXGIFactory2>()? };
     let window_size = window.inner_size();
     let swap_chain = unsafe {
@@ -139,10 +140,10 @@ fn main() -> anyhow::Result<()> {
 
     let vertex_buffer = unsafe {
         const VERTICES: [Vertex; 4] = [
-            Vertex::new([-0.5, 0.5, 0.0], [0.0, 0.0]),
-            Vertex::new([0.5, 0.5, 0.0], [1.0, 0.0]),
-            Vertex::new([-0.5, -0.5, 0.0], [0.0, 1.0]),
-            Vertex::new([0.5, -0.5, 0.0], [1.0, 1.0]),
+            Vertex::new([-1.0, 1.0, 0.0], [0.0, 0.0]),
+            Vertex::new([1.0, 1.0, 0.0], [1.0, 0.0]),
+            Vertex::new([-1.0, -1.0, 0.0], [0.0, 1.0]),
+            Vertex::new([1.0, -1.0, 0.0], [1.0, 1.0]),
         ];
         d3d_device.CreateBuffer(
             &D3D11_BUFFER_DESC {
@@ -237,6 +238,19 @@ fn main() -> anyhow::Result<()> {
         let input_layout = d3d_device.CreateInputLayout(&descs, vs_blob)?;
         (vs, ps, input_layout)
     };
+    let sampler = unsafe {
+        d3d_device.CreateSamplerState(&D3D11_SAMPLER_DESC {
+            Filter: D3D11_FILTER_MIN_MAG_MIP_LINEAR,
+            AddressU: D3D11_TEXTURE_ADDRESS_CLAMP,
+            AddressV: D3D11_TEXTURE_ADDRESS_CLAMP,
+            AddressW: D3D11_TEXTURE_ADDRESS_CLAMP,
+            MinLOD: f32::MIN,
+            MaxLOD: f32::MAX,
+            MaxAnisotropy: 1,
+            ..Default::default()
+        })?
+    };
+
 
     /*
     let mut render_target = ctx.create_render_target(
@@ -250,36 +264,39 @@ fn main() -> anyhow::Result<()> {
         *control_flow = ControlFlow::Wait;
         match event {
             Event::RedrawRequested(_) => {
-                unsafe {
-                    let window_size = window.inner_size();
+                if let Some(tex) = dupl.get_frame() {
+                    unsafe {
+                        let window_size = window.inner_size();
 
-                    d3d_ctx.ClearRenderTargetView(rtv.as_ref().unwrap(), [0.0, 1.0, 1.0, 1.0].as_ptr());
+                        d3d_ctx.ClearRenderTargetView(rtv.as_ref().unwrap(), [0.0, 1.0, 1.0, 1.0].as_ptr());
 
-                    d3d_ctx.IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-                    d3d_ctx.IASetInputLayout(&input_layout);
-                    d3d_ctx.IASetIndexBuffer(&index_buffer, DXGI_FORMAT_R32_UINT, 0);
-                    d3d_ctx.IASetVertexBuffers(
-                        0,
-                        1,
-                        Some([Some(vertex_buffer.clone())].as_mut_ptr()),
-                        Some([size_of::<Vertex>() as u32].as_ptr()),
-                        Some([0].as_ptr()),
-                    );
-                    d3d_ctx.OMSetRenderTargets(Some(&[rtv.clone()]), None);
-                    //d3d_ctx.OMSetBlendState(&blend, None, u32::MAX);
-                    d3d_ctx.VSSetShader(&vs, None);
-                    d3d_ctx.PSSetShader(&ps, None);
-                    //d3d_ctx.PSSetShaderResources(0, Some(&[Some(tex_view.clone())]));
-                    //d3d_ctx.PSSetSamplers(0, Some(&[Some(sampler.clone())]));
-                    d3d_ctx.RSSetViewports(Some(&[D3D11_VIEWPORT {
-                        Width: window_size.width as f32,
-                        Height: window_size.height as f32,
-                        MaxDepth: 1.0,
-                        ..Default::default()
-                    }]));
-                    d3d_ctx.DrawIndexed(6, 0, 0);
+                        d3d_ctx.IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+                        d3d_ctx.IASetInputLayout(&input_layout);
+                        d3d_ctx.IASetIndexBuffer(&index_buffer, DXGI_FORMAT_R32_UINT, 0);
+                        d3d_ctx.IASetVertexBuffers(
+                            0,
+                            1,
+                            Some([Some(vertex_buffer.clone())].as_mut_ptr()),
+                            Some([size_of::<Vertex>() as u32].as_ptr()),
+                            Some([0].as_ptr()),
+                        );
+                        d3d_ctx.OMSetRenderTargets(Some(&[rtv.clone()]), None);
+                        //d3d_ctx.OMSetBlendState(&blend, None, u32::MAX);
+                        d3d_ctx.VSSetShader(&vs, None);
+                        d3d_ctx.PSSetShader(&ps, None);
+                        let tex_view = d3d_device.CreateShaderResourceView(tex, None).unwrap();
+                        d3d_ctx.PSSetShaderResources(0, Some(&[Some(tex_view)]));
+                        d3d_ctx.PSSetSamplers(0, Some(&[Some(sampler.clone())]));
+                        d3d_ctx.RSSetViewports(Some(&[D3D11_VIEWPORT {
+                            Width: window_size.width as f32,
+                            Height: window_size.height as f32,
+                            MaxDepth: 1.0,
+                            ..Default::default()
+                        }]));
+                        d3d_ctx.DrawIndexed(6, 0, 0);
 
-                    swap_chain.Present(1, 0).unwrap();
+                        swap_chain.Present(1, 0).unwrap();
+                    }
                 }
                 /*
                 if let Some(tex) = dupl.get_frame() {
@@ -325,7 +342,7 @@ fn main() -> anyhow::Result<()> {
             },
             Event::UserEvent(CustomEvent::CursorMonitorSwitch(monitor)) => {
                 //let monitor: winit::monitor::MonitorHandle = unsafe {std::mem::transmute(monitor)};
-                /*
+
                 match adapter.iter_displays().find(|d|d.hmonitor().unwrap() == monitor) {
                     None => log::warn!("Cannot find the correct display"),
                     Some(display) => {
@@ -333,13 +350,13 @@ fn main() -> anyhow::Result<()> {
                         vsync_switcher.change_display(display);
                     }
                 }
-                */
-                log::info!("Cursor event: {:?}", monitor);
+
+                //log::info!("Cursor event: {:?}", monitor);
             },
             Event::UserEvent(CustomEvent::VBlank) => {
-                //if let Ok(()) = dupl.try_acquire_next_frame() {
-                //    window.request_redraw();
-                //}
+                if let Ok(()) = dupl.try_acquire_next_frame() {
+                    window.request_redraw();
+                }
             },
             Event::WindowEvent { event: WindowEvent::Resized(size), .. } => {
                 //ctx.resize_target(&mut render_target, (size.width, size.height))
