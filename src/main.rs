@@ -2,10 +2,13 @@
 
 mod cursor_tracker;
 mod vsync_helper;
+mod menu_helper;
 
 use log::LevelFilter;
 use mltg::{CompositeMode, Interpolation};
 use raw_window_handle::HasRawWindowHandle;
+use tray_icon::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem};
+use tray_icon::TrayIconBuilder;
 use win_desktop_duplication::{co_init, CursorType, DesktopDuplicationApi, set_process_dpi_awareness};
 use win_desktop_duplication::devices::AdapterFactory;
 use windows::Win32::Graphics::Gdi::HMONITOR;
@@ -16,7 +19,8 @@ use winit::platform::windows::WindowBuilderExtWindows;
 #[derive(Debug, Clone, Copy)]
 pub enum CustomEvent {
     CursorMonitorSwitch(HMONITOR),
-    VBlank
+    VBlank,
+    Menu(u32)
 }
 
 
@@ -46,6 +50,16 @@ fn main() -> anyhow::Result<()> {
         .build(&event_loop)?;
     let _tracker = cursor_tracker::set_hook(&event_loop);
     let vsync_switcher = vsync_helper::start_vsync_thread(&event_loop, output.clone());
+    menu_helper::forward_events(&event_loop);
+
+    let quit_i = MenuItem::new("Quit", true, None);
+    let tray_menu = Menu::with_items(&[
+        &quit_i,
+    ]);
+    let _tray_icon = TrayIconBuilder::new()
+        .with_menu(Box::new(tray_menu))
+        .with_tooltip("Window Peek")
+        .build()?;
 
     let ctx = mltg::Context::new(mltg::Direct2D::new(adapter.as_raw_ref())?)?;
     let factory = ctx.create_factory();
@@ -115,10 +129,16 @@ fn main() -> anyhow::Result<()> {
                         vsync_switcher.change_display(display);
                     }
                 }
+                //log::info!("Cursor event: {:?}", monitor);
             },
             Event::UserEvent(CustomEvent::VBlank) => {
                 if let Ok(()) = dupl.try_acquire_next_frame() {
                     window.request_redraw();
+                }
+            },
+            Event::UserEvent(CustomEvent::Menu(id)) => {
+                if id == quit_i.id() {
+                    *control_flow = ControlFlow::Exit;
                 }
             }
             Event::WindowEvent {

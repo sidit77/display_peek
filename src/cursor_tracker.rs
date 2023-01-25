@@ -9,7 +9,8 @@ use winit::platform::windows::HMONITOR;
 use crate::CustomEvent;
 
 struct CursorTrackerContext {
-    current_monitor: MONITORINFO,
+    current_monitor: HMONITOR,
+    current_monitor_info: MONITORINFO,
     event_loop_proxy: EventLoopProxy<CustomEvent>
 }
 
@@ -39,14 +40,17 @@ unsafe extern "system" fn ll_mouse_proc(code: i32, wparam: WPARAM, lparam: LPARA
         let event = (lparam as *const MSLLHOOKSTRUCT).read();
         CONTEXT.with(|ctx| {
            if let Some(ctx) = ctx.borrow_mut().deref_mut() {
-                if !contains(ctx.current_monitor.rcMonitor, event.pt) {
+                if !contains(ctx.current_monitor_info.rcMonitor, event.pt) {
                     let monitor = MonitorFromPoint(event.pt, MONITOR_DEFAULTTONEAREST);
-                    if let Some(info) = get_monitor_info(monitor) {
-                        let monitor = windows::Win32::Graphics::Gdi::HMONITOR(monitor);
-                        if let Err(e) = ctx.event_loop_proxy.send_event(CustomEvent::CursorMonitorSwitch(monitor)){
-                            log::warn!("Cannot send event: {}", e);
+                    if monitor != ctx.current_monitor {
+                        if let Some(info) = get_monitor_info(monitor) {
+                            ctx.current_monitor_info = info;
+                            ctx.current_monitor = monitor;
+                            let monitor = windows::Win32::Graphics::Gdi::HMONITOR(monitor);
+                            if let Err(e) = ctx.event_loop_proxy.send_event(CustomEvent::CursorMonitorSwitch(monitor)){
+                                log::warn!("Cannot send event: {}", e);
+                            }
                         }
-                        ctx.current_monitor = info;
                     }
                 }
            }
@@ -78,12 +82,14 @@ fn get_current_monitor() -> Option<HMONITOR> {
 
 #[must_use]
 pub fn set_hook(event_loop: &EventLoop<CustomEvent>) -> CursorTrackerHandle {
-    let info = get_current_monitor().and_then(get_monitor_info).unwrap();
+    let monitor = get_current_monitor().unwrap();
+    let info = get_monitor_info(monitor).unwrap();
     let result = CONTEXT.with(|ctx| {
         let mut ctx = ctx.borrow_mut();
         if ctx.is_none() {
             ctx.replace(CursorTrackerContext {
-                current_monitor: info,
+                current_monitor: monitor,
+                current_monitor_info: info,
                 event_loop_proxy: event_loop.create_proxy(),
             });
             true
