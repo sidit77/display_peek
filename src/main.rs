@@ -7,20 +7,21 @@ mod menu_helper;
 use log::LevelFilter;
 use mltg::{CompositeMode, Interpolation};
 use raw_window_handle::HasRawWindowHandle;
-use tray_icon::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem};
-use tray_icon::TrayIconBuilder;
 use win_desktop_duplication::{co_init, CursorType, DesktopDuplicationApi, set_process_dpi_awareness};
 use win_desktop_duplication::devices::AdapterFactory;
 use windows::Win32::Graphics::Gdi::HMONITOR;
-use winit::{dpi::*, event::*, event_loop::*, window::*};
-use winit::platform::run_return::EventLoopExtRunReturn;
-use winit::platform::windows::WindowBuilderExtWindows;
+use tao::{dpi::*, event::*, event_loop::*, window::*};
+use tao::keyboard::Key;
+use tao::menu::{MenuItemAttributes, MenuType};
+use tao::menu::ContextMenu;
+use tao::platform::run_return::EventLoopExtRunReturn;
+use tao::platform::windows::WindowBuilderExtWindows;
+use tao::system_tray::SystemTrayBuilder;
 
 #[derive(Debug, Clone, Copy)]
 pub enum CustomEvent {
     CursorMonitorSwitch(HMONITOR),
-    VBlank,
-    Menu(u32)
+    VBlank
 }
 
 
@@ -39,7 +40,7 @@ fn main() -> anyhow::Result<()> {
     let mut display_iter = adapter.iter_displays().cycle();
     let output = display_iter.next().unwrap();
 
-    let mut event_loop = EventLoopBuilder::with_user_event().build();
+    let mut event_loop = EventLoop::with_user_event();
     let window = WindowBuilder::new()
         .with_title("mltg d2d")
         .with_drag_and_drop(false)
@@ -50,16 +51,12 @@ fn main() -> anyhow::Result<()> {
         .build(&event_loop)?;
     let _tracker = cursor_tracker::set_hook(&event_loop);
     let vsync_switcher = vsync_helper::start_vsync_thread(&event_loop, output.clone());
-    menu_helper::forward_events(&event_loop);
 
-    let quit_i = MenuItem::new("Quit", true, None);
-    let tray_menu = Menu::with_items(&[
-        &quit_i,
-    ]);
-    let _tray_icon = TrayIconBuilder::new()
-        .with_menu(Box::new(tray_menu))
+    let mut tray_menu = ContextMenu::new();
+    let quit_item = tray_menu.add_item(MenuItemAttributes::new("Quit"));
+    let _tray = SystemTrayBuilder::new(Icon::from_rgba(vec![255u8; 32 * 32 * 4], 32, 32)?, Some(tray_menu))
         .with_tooltip("Window Peek")
-        .build()?;
+        .build(&event_loop)?;
 
     let ctx = mltg::Context::new(mltg::Direct2D::new(adapter.as_raw_ref())?)?;
     let factory = ctx.create_factory();
@@ -68,7 +65,7 @@ fn main() -> anyhow::Result<()> {
         ctx.backend.d3d11_device.clone(),
         ctx.backend.d3d11_ctx.clone(),
         ctx.d2d1_device_context.clone(),
-        output.clone()).unwrap();
+        output).unwrap();
 
     let window_size = window.inner_size();
     let mut render_target = ctx.create_render_target(
@@ -122,7 +119,7 @@ fn main() -> anyhow::Result<()> {
             },
             Event::UserEvent(CustomEvent::CursorMonitorSwitch(monitor)) => {
                 //let monitor: winit::monitor::MonitorHandle = unsafe {std::mem::transmute(monitor)};
-                match adapter.iter_displays().filter(|d|d.hmonitor() == monitor).next() {
+                match adapter.iter_displays().find(|d|d.hmonitor() == monitor) {
                     None => log::warn!("Cannot find the correct display"),
                     Some(display) => {
                         dupl.switch_output(display.clone()).unwrap();
@@ -136,11 +133,6 @@ fn main() -> anyhow::Result<()> {
                     window.request_redraw();
                 }
             },
-            Event::UserEvent(CustomEvent::Menu(id)) => {
-                if id == quit_i.id() {
-                    *control_flow = ControlFlow::Exit;
-                }
-            }
             Event::WindowEvent {
                 event: WindowEvent::Resized(size),
                 ..
@@ -148,27 +140,28 @@ fn main() -> anyhow::Result<()> {
                 ctx.resize_target(&mut render_target, (size.width, size.height))
                     .unwrap();
             }
-            Event::WindowEvent {
-                event: WindowEvent::KeyboardInput { input: KeyboardInput{
-                    state: ElementState::Pressed,
-                    virtual_keycode: Some(VirtualKeyCode::F1),
-                    ..
-                }, .. },
+            Event::MenuEvent {
+                menu_id,
+                origin: MenuType::ContextMenu,
                 ..
             } => {
+                if menu_id == quit_item.clone().id() {
+                    *control_flow = ControlFlow::Exit;
+                }
+            }
+            Event::WindowEvent { event: WindowEvent::KeyboardInput { event: KeyEvent {
+                logical_key: Key::F1,
+                state: ElementState::Pressed,
+                .. }, .. }, .. } => {
                 let display = display_iter.next().unwrap();
                 dupl.switch_output(display.clone()).unwrap();
                 vsync_switcher.change_display(display.clone());
                 log::info!("Current Display: {:?}", display.name());
             }
-            Event::WindowEvent {
-                event: WindowEvent::KeyboardInput { input: KeyboardInput{
-                    state: ElementState::Pressed,
-                    virtual_keycode: Some(VirtualKeyCode::Escape),
-                    ..
-                }, .. },
-                ..
-            } => {
+            Event::WindowEvent { event: WindowEvent::KeyboardInput { event: KeyEvent {
+               logical_key: Key::Escape,
+               state: ElementState::Pressed,
+                .. }, .. }, .. } => {
                 *control_flow = ControlFlow::Exit;
             }
             Event::WindowEvent {

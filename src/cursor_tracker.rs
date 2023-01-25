@@ -1,11 +1,10 @@
 use std::cell::{RefCell};
 use std::mem::{size_of, zeroed};
 use std::ops::DerefMut;
+use tao::event_loop::{EventLoop, EventLoopProxy};
 use windows_sys::Win32::Foundation::{LPARAM, LRESULT, POINT, RECT, TRUE, WPARAM};
-use windows_sys::Win32::Graphics::Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MonitorFromPoint, MONITORINFO};
+use windows_sys::Win32::Graphics::Gdi::{GetMonitorInfoW, HMONITOR, MONITOR_DEFAULTTONEAREST, MonitorFromPoint, MONITORINFO};
 use windows_sys::Win32::UI::WindowsAndMessaging::{CallNextHookEx, GetCursorPos, HHOOK, MSLLHOOKSTRUCT, SetWindowsHookExW, UnhookWindowsHookEx, WH_MOUSE_LL, WM_MOUSEMOVE};
-use winit::event_loop::{EventLoop, EventLoopProxy};
-use winit::platform::windows::HMONITOR;
 use crate::CustomEvent;
 
 struct CursorTrackerContext {

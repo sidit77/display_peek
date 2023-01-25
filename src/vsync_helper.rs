@@ -1,6 +1,6 @@
 use std::sync::mpsc::{Sender, TryRecvError};
 use win_desktop_duplication::outputs::Display;
-use winit::event_loop::EventLoop;
+use tao::event_loop::EventLoop;
 use crate::CustomEvent;
 
 #[derive(Debug, Clone)]
@@ -8,7 +8,7 @@ pub struct VSyncThreadHandle(Sender<Option<Display>>);
 
 impl VSyncThreadHandle {
     pub fn change_display(&self, display: impl Into<Option<Display>>) {
-        if let Err(_) = self.0.send(display.into()) {
+        if self.0.send(display.into()).is_err() {
             log::warn!("Cannot set display for vsync thread");
         }
     }
