@@ -294,6 +294,7 @@ dependencies = [
  "mltg",
  "raw-window-handle",
  "tao",
+ "tauri-winres",
  "win_desktop_duplication",
  "windows 0.43.0",
  "windows-sys 0.45.0",
@@ -1389,6 +1390,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "tauri-winres"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b7a78dc04f75fb5ab815e66ac561c81e92a968a40f29e7c21afd152d694fad8"
+dependencies = [
+ "toml",
+ "version_check",
 ]
 
 [[package]]

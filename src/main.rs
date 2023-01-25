@@ -15,7 +15,7 @@ use tao::keyboard::Key;
 use tao::menu::{MenuItemAttributes, MenuType};
 use tao::menu::ContextMenu;
 use tao::platform::run_return::EventLoopExtRunReturn;
-use tao::platform::windows::WindowBuilderExtWindows;
+use tao::platform::windows::{IconExtWindows, WindowBuilderExtWindows};
 use tao::system_tray::SystemTrayBuilder;
 
 #[derive(Debug, Clone, Copy)]
@@ -54,7 +54,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut tray_menu = ContextMenu::new();
     let quit_item = tray_menu.add_item(MenuItemAttributes::new("Quit"));
-    let _tray = SystemTrayBuilder::new(Icon::from_rgba(vec![255u8; 32 * 32 * 4], 32, 32)?, Some(tray_menu))
+    let _tray = SystemTrayBuilder::new(Icon::from_resource(32512, None)?, Some(tray_menu))
         .with_tooltip("Window Peek")
         .build(&event_loop)?;
 
