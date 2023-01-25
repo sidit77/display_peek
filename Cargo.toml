@@ -20,7 +20,6 @@ log = "0.4"
 fps_counter = "2.0"
 raw-window-handle = "0.5"
 mltg = { path="./lib/mltg" }
-win_desktop_duplication = { path="./lib/win_desktop_duplication" }
 
 [dependencies.windows-sys]
 version = ">= 0.43"
@@ -33,5 +32,15 @@ features = [
 [dependencies.windows]
 version = ">= 0.43"
 features = [
-
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Direct3D",
+    "Win32_System_StationsAndDesktops",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Dxgi",
+    "Win32_System_SystemServices",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Com",
+    "Win32_UI_HiDpi"
 ]

@@ -1,7 +1,7 @@
 use std::sync::mpsc::{Sender, TryRecvError};
-use win_desktop_duplication::outputs::Display;
 use tao::event_loop::EventLoop;
 use crate::CustomEvent;
+use crate::directx::Display;
 
 #[derive(Debug, Clone)]
 pub struct VSyncThreadHandle(Sender<Option<Display>>);

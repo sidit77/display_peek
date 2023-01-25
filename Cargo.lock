@@ -295,7 +295,6 @@ dependencies = [
  "raw-window-handle",
  "tao",
  "tauri-winres",
- "win_desktop_duplication",
  "windows 0.43.0",
  "windows-sys 0.45.0",
 ]
@@ -1495,14 +1494,6 @@ name = "wasi"
 version = "0.11.0+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
-
-[[package]]
-name = "win_desktop_duplication"
-version = "0.10.6"
-dependencies = [
- "log",
- "windows 0.43.0",
-]
 
 [[package]]
 name = "winapi"

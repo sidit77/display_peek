@@ -2,13 +2,13 @@
 
 mod cursor_tracker;
 mod vsync_helper;
-mod menu_helper;
+mod utils;
+mod directx;
 
+use std::ptr::null;
 use log::LevelFilter;
 use mltg::{CompositeMode, Interpolation};
 use raw_window_handle::HasRawWindowHandle;
-use win_desktop_duplication::{co_init, CursorType, DesktopDuplicationApi, set_process_dpi_awareness};
-use win_desktop_duplication::devices::AdapterFactory;
 use windows::Win32::Graphics::Gdi::HMONITOR;
 use tao::{dpi::*, event::*, event_loop::*, window::*};
 use tao::keyboard::Key;
@@ -17,6 +17,9 @@ use tao::menu::ContextMenu;
 use tao::platform::run_return::EventLoopExtRunReturn;
 use tao::platform::windows::{IconExtWindows, WindowBuilderExtWindows};
 use tao::system_tray::SystemTrayBuilder;
+use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx};
+use windows::Win32::UI::HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext};
+use crate::directx::{AdapterFactory, CursorType, DesktopDuplicationApi};
 
 #[derive(Debug, Clone, Copy)]
 pub enum CustomEvent {
@@ -28,13 +31,13 @@ pub enum CustomEvent {
 fn main() -> anyhow::Result<()> {
     env_logger::builder()
         .filter_level(LevelFilter::Trace)
-        .filter(Some("win_desktop_duplication::duplication"), LevelFilter::Debug)
+        .filter(Some("desktop_display::directx::duplication"), LevelFilter::Debug)
         .format_timestamp(None)
         //.format_target(false)
         .init();
 
-    set_process_dpi_awareness();
-    co_init();
+    unsafe { SetProcessDpiAwarenessContext(Some(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)); }
+    unsafe { CoInitializeEx(Some(null()), COINIT_MULTITHREADED)?; }
 
     let adapter = AdapterFactory::new().get_adapter_by_idx(0).unwrap();
     let mut display_iter = adapter.iter_displays().cycle();
@@ -84,19 +87,21 @@ fn main() -> anyhow::Result<()> {
                     ctx.set_scale_factor(window.scale_factor() as _);
                     ctx.draw(&render_target, |cmd| {
                         cmd.clear((0.0, 0.0, 0.3, 0.0));
-                        let aspect = tex.desc().width as f32 / tex.desc().height as  f32;
+                        let mut desc = Default::default();
+                        unsafe { tex.GetDesc(&mut desc); }
+                        let aspect = desc.Width as f32 / desc.Height as  f32;
                         let width = window_size.width.min(window_size.height * aspect);
                         let height = width / aspect;
                         let x = 0.5 * (window_size.width - width);
                         let y = 0.5 * (window_size.height - height);
-                        let scale = height / tex.desc().height as f32;
+                        let scale = height / desc.Height as f32;
                         let interpolation = if scale > 0.6 {
                             Interpolation::Cubic
                         } else {
                             Interpolation::HighQualityCubic
                         };
                         cmd.set_transform(x, y, scale);
-                        cmd.draw_bitmap2(&factory.create_bitmap(tex.as_raw_ref()).unwrap(), (0.0,0.0), interpolation, CompositeMode::SourceOver);
+                        cmd.draw_bitmap2(&factory.create_bitmap(tex).unwrap(), (0.0,0.0), interpolation, CompositeMode::SourceOver);
 
                         if let Some((cursor, cursor_type)) = dupl.get_cursor() {
                             match cursor_type {
@@ -119,7 +124,7 @@ fn main() -> anyhow::Result<()> {
             },
             Event::UserEvent(CustomEvent::CursorMonitorSwitch(monitor)) => {
                 //let monitor: winit::monitor::MonitorHandle = unsafe {std::mem::transmute(monitor)};
-                match adapter.iter_displays().find(|d|d.hmonitor() == monitor) {
+                match adapter.iter_displays().find(|d|d.hmonitor().unwrap() == monitor) {
                     None => log::warn!("Cannot find the correct display"),
                     Some(display) => {
                         dupl.switch_output(display.clone()).unwrap();

@@ -1,6 +1,3 @@
 [submodule "lib/mltg"]
 	path = lib/mltg
 	url = https://github.com/LNSEAB/mltg.git
-[submodule "lib/win_desktop_duplication"]
-	path = lib/win_desktop_duplication
-	url = https://github.com/rhinostream/win_desktop_duplication.git
