@@ -294,6 +294,7 @@ dependencies = [
  "mltg",
  "raw-window-handle 0.5.0",
  "win_desktop_duplication",
+ "windows",
  "windows-sys 0.45.0",
  "winit",
 ]
