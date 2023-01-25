@@ -1,6 +1,7 @@
 #![windows_subsystem = "windows"]
 
 mod cursor_tracker;
+mod vsync_helper;
 
 use log::LevelFilter;
 use mltg::{CompositeMode, Interpolation};
@@ -14,7 +15,8 @@ use winit::platform::windows::WindowBuilderExtWindows;
 
 #[derive(Debug, Clone, Copy)]
 pub enum CustomEvent {
-    CursorMonitorSwitch(HMONITOR)
+    CursorMonitorSwitch(HMONITOR),
+    VBlank
 }
 
 
@@ -29,6 +31,10 @@ fn main() -> anyhow::Result<()> {
     set_process_dpi_awareness();
     co_init();
 
+    let adapter = AdapterFactory::new().get_adapter_by_idx(0).unwrap();
+    let mut display_iter = adapter.iter_displays().cycle();
+    let output = display_iter.next().unwrap();
+
     let mut event_loop = EventLoopBuilder::with_user_event().build();
     let window = WindowBuilder::new()
         .with_title("mltg d2d")
@@ -39,10 +45,7 @@ fn main() -> anyhow::Result<()> {
         //.with_skip_taskbar(true)
         .build(&event_loop)?;
     let _tracker = cursor_tracker::set_hook(&event_loop);
-
-    let adapter = AdapterFactory::new().get_adapter_by_idx(0).unwrap();
-    let mut display_iter = adapter.iter_displays().cycle();
-    let output = display_iter.next().unwrap();
+    let vsync_switcher = vsync_helper::start_vsync_thread(&event_loop, output.clone());
 
     let ctx = mltg::Context::new(mltg::Direct2D::new(adapter.as_raw_ref())?)?;
     let factory = ctx.create_factory();
@@ -53,8 +56,6 @@ fn main() -> anyhow::Result<()> {
         ctx.d2d1_device_context.clone(),
         output.clone()).unwrap();
 
-
-
     let window_size = window.inner_size();
     let mut render_target = ctx.create_render_target(
         window.raw_window_handle(),
@@ -64,7 +65,7 @@ fn main() -> anyhow::Result<()> {
     let mut fps = fps_counter::FPSCounter::new();
 
     event_loop.run_return(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Poll;
+        *control_flow = ControlFlow::Wait;
         match event {
             Event::RedrawRequested(_) => {
                 if let Some(tex) = dupl.get_frame() {
@@ -105,17 +106,19 @@ fn main() -> anyhow::Result<()> {
                 }
                 window.set_title(&format!("{} fps", fps.tick()))
             },
-            Event::MainEventsCleared => {
-                //output.wait_for_vsync().unwrap();
-                if let Ok(()) = dupl.try_acquire_next_frame() {
-                    window.request_redraw();
-                }
-            }
             Event::UserEvent(CustomEvent::CursorMonitorSwitch(monitor)) => {
                 //let monitor: winit::monitor::MonitorHandle = unsafe {std::mem::transmute(monitor)};
                 match adapter.iter_displays().filter(|d|d.hmonitor() == monitor).next() {
                     None => log::warn!("Cannot find the correct display"),
-                    Some(display) => dupl.switch_output(display).unwrap()
+                    Some(display) => {
+                        dupl.switch_output(display.clone()).unwrap();
+                        vsync_switcher.change_display(display);
+                    }
+                }
+            },
+            Event::UserEvent(CustomEvent::VBlank) => {
+                if let Ok(()) = dupl.try_acquire_next_frame() {
+                    window.request_redraw();
                 }
             }
             Event::WindowEvent {
@@ -135,6 +138,7 @@ fn main() -> anyhow::Result<()> {
             } => {
                 let display = display_iter.next().unwrap();
                 dupl.switch_output(display.clone()).unwrap();
+                vsync_switcher.change_display(display.clone());
                 log::info!("Current Display: {:?}", display.name());
             }
             Event::WindowEvent {
