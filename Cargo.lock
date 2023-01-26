@@ -290,12 +290,11 @@ dependencies = [
  "anyhow",
  "env_logger",
  "fps_counter",
+ "glam",
  "log",
  "mltg",
- "raw-window-handle",
  "tao",
  "tauri-winres",
- "windows 0.43.0",
  "windows 0.44.0",
  "windows-sys 0.45.0",
 ]
@@ -580,6 +579,12 @@ dependencies = [
  "system-deps",
  "winapi",
 ]
+
+[[package]]
+name = "glam"
+version = "0.22.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12f597d56c1bd55a811a1be189459e8fad2bbc272616375602443bdfb37fa774"
 
 [[package]]
 name = "glib"

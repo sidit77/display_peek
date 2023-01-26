@@ -8,12 +8,18 @@ struct VSOutput {
     float2 uv: TEXCOORD0;
 };
 
+cbuffer cbPerObject
+{
+    float4 offset;
+};
+
 Texture2D tex: register(t0);
 SamplerState samp: register(s0);
 
+
 VSOutput vs_main(VSInput input) {
     VSOutput output;
-    output.position = float4(input.position, 1.0f);
+    output.position = float4(input.position, 1.0f) + offset;
     output.uv= input.uv;
     return output;
 }

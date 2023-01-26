@@ -62,9 +62,11 @@ impl Direct3D {
             )?
         };
 
-        let rtv = unsafe {
+        let mut rtv = unsafe {
             let buffer = swap_chain.GetBuffer::<ID3D11Texture2D>(0)?;
-            d3d_device.CreateRenderTargetView(&buffer, None)?
+            let mut target = std::mem::zeroed();
+            d3d_device.CreateRenderTargetView(&buffer, None, Some(&mut target))?;
+            target.unwrap()
         };
 
         Ok(Self {
@@ -85,7 +87,7 @@ impl Direct3D {
             self.render_target = None;
             self.swap_chain.ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0)?;
             let buffer = self.swap_chain.GetBuffer::<ID3D11Texture2D>(0).unwrap();
-            self.render_target = Some(self.device.CreateRenderTargetView(&buffer, None)?);
+            self.device.CreateRenderTargetView(&buffer, None, Some(&mut self.render_target))?;
             Ok(())
         }
     }

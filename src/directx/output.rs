@@ -7,7 +7,7 @@ use std::ptr::{null, null_mut};
 use windows::Win32::Graphics::Dxgi::{DXGI_MODE_DESC1, DXGI_OUTPUT_DESC1, IDXGIOutput6};
 use windows::core::{PCSTR};
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT, DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R8G8B8A8_UNORM};
-use windows::Win32::Graphics::Gdi::{CDS_TYPE, ChangeDisplaySettingsExA, DEVMODEA, DISP_CHANGE_SUCCESSFUL, DM_BITSPERPEL, DM_DISPLAYFREQUENCY, DM_DISPLAYORIENTATION, DM_PELSHEIGHT, DM_PELSWIDTH, ENUM_CURRENT_SETTINGS, EnumDisplaySettingsExA, HMONITOR};
+use windows::Win32::Graphics::Gdi::{CDS_TYPE, ChangeDisplaySettingsExA, DEVMODE_DISPLAY_ORIENTATION, DEVMODEA, DISP_CHANGE_SUCCESSFUL, DM_BITSPERPEL, DM_DISPLAYFREQUENCY, DM_DISPLAYORIENTATION, DM_PELSHEIGHT, DM_PELSWIDTH, DMDO_180, DMDO_270, DMDO_90, DMDO_DEFAULT, ENUM_CURRENT_SETTINGS, EnumDisplaySettingsExA, HMONITOR};
 use anyhow::{anyhow, Context, Result};
 use crate::utils::convert_u16_to_string;
 
@@ -21,12 +21,14 @@ impl Display {
     }
 
     pub fn name(&self) -> Result<String> {
-        let desc: DXGI_OUTPUT_DESC1 = unsafe { self.0.GetDesc1()? };
+        let mut desc = Default::default();
+        unsafe { self.0.GetDesc1(&mut desc)? };
         Ok(convert_u16_to_string(&desc.DeviceName))
     }
 
     pub fn hmonitor(&self) -> Result<HMONITOR> {
-        let desc: DXGI_OUTPUT_DESC1 = unsafe { self.0.GetDesc1()? };
+        let mut desc = Default::default();
+        unsafe { self.0.GetDesc1(&mut desc)? };
         Ok(desc.Monitor)
     }
 
@@ -152,24 +154,24 @@ pub enum DisplayOrientation {
     FlippedPortrait,
 }
 
-impl From<u32> for DisplayOrientation {
-    fn from(i: u32) -> Self {
+impl From<DEVMODE_DISPLAY_ORIENTATION> for DisplayOrientation {
+    fn from(i: DEVMODE_DISPLAY_ORIENTATION) -> Self {
         match i {
-            1 => Self::Portrait,
-            2 => Self::FlippedLandscape,
-            3 => Self::FlippedPortrait,
+            DMDO_90 => Self::Portrait,
+            DMDO_180 => Self::FlippedLandscape,
+            DMDO_270 => Self::FlippedPortrait,
             _ => Self::Landscape,
         }
     }
 }
 
-impl From<DisplayOrientation> for u32 {
+impl From<DisplayOrientation> for DEVMODE_DISPLAY_ORIENTATION {
     fn from(i: DisplayOrientation) -> Self {
         match i {
-            DisplayOrientation::Landscape => { 0 }
-            DisplayOrientation::Portrait => { 1 }
-            DisplayOrientation::FlippedLandscape => { 2 }
-            DisplayOrientation::FlippedPortrait => { 3 }
+            DisplayOrientation::Landscape => { DMDO_DEFAULT }
+            DisplayOrientation::Portrait => { DMDO_90 }
+            DisplayOrientation::FlippedLandscape => { DMDO_180 }
+            DisplayOrientation::FlippedPortrait => { DMDO_270 }
         }
     }
 }

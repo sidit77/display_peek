@@ -1,15 +1,13 @@
 use log::{debug, error, trace, warn};
 use windows::Win32::Graphics::Direct3D11::{ID3D11Device, ID3D11Device4, ID3D11DeviceContext4, ID3D11Texture2D};
-use windows::Win32::Graphics::Direct2D::{D2D1_BITMAP_PROPERTIES, ID2D1Bitmap, ID2D1DeviceContext5};
 use windows::Win32::Graphics::Dxgi::{DXGI_OUTDUPL_POINTER_SHAPE_TYPE, DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME, DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR, DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MASKED_COLOR, DXGI_OUTDUPL_POINTER_SHAPE_INFO, DXGI_ERROR_UNSUPPORTED, DXGI_ERROR_SESSION_DISCONNECTED, IDXGIDevice4, IDXGIOutputDuplication, DXGI_ERROR_ACCESS_LOST, DXGI_ERROR_ACCESS_DENIED, DXGI_ERROR_INVALID_CALL, DXGI_ERROR_WAIT_TIMEOUT, IDXGIResource};
 use windows::core::Interface;
 use windows::core::Result as WinResult;
 use windows::Win32::Foundation::{E_INVALIDARG, E_ACCESSDENIED, POINT, GetLastError};
-use windows::Win32::Graphics::Direct2D::Common::{D2D_SIZE_U, D2D1_PIXEL_FORMAT, D2D1_ALPHA_MODE_PREMULTIPLIED};
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R16G16B16A16_FLOAT};
-use windows::Win32::System::StationsAndDesktops::{OpenInputDesktop, SetThreadDesktop, DF_ALLOWOTHERACCOUNTHOOK};
-use windows::Win32::System::SystemServices::GENERIC_READ;
+use windows::Win32::System::StationsAndDesktops::{OpenInputDesktop, SetThreadDesktop, DF_ALLOWOTHERACCOUNTHOOK, DESKTOP_ACCESS_FLAGS};
 use anyhow::{anyhow, Result};
+use windows::Win32::System::SystemServices::GENERIC_READ;
 use crate::directx::Display;
 use crate::utils::U8Iter;
 
@@ -344,7 +342,7 @@ impl DesktopDuplicationApi {
  */
     fn switch_thread_desktop() -> Result<()> {
         debug!("trying to switch Thread desktop");
-        let desk = unsafe { OpenInputDesktop(DF_ALLOWOTHERACCOUNTHOOK as _, true, GENERIC_READ) };
+        let desk = unsafe { OpenInputDesktop(DF_ALLOWOTHERACCOUNTHOOK as _, true, DESKTOP_ACCESS_FLAGS(GENERIC_READ)) };
         if let Err(err) = desk {
             error!("dint get desktop : {:?}", err);
             //return Err(DDApiError::AccessDenied);
@@ -361,9 +359,9 @@ impl DesktopDuplicationApi {
 }
 
 pub enum CursorType {
-    Color(ID2D1Bitmap),
-    Monochrome(ID2D1Bitmap, ID2D1Bitmap),
-    MaskedColor(ID2D1Bitmap, ID2D1Bitmap)
+    //Color(ID2D1Bitmap),
+    //Monochrome(ID2D1Bitmap, ID2D1Bitmap),
+    //MaskedColor(ID2D1Bitmap, ID2D1Bitmap)
 }
 
 /// Settings to configure Desktop duplication api. these can be configured even after initialized.

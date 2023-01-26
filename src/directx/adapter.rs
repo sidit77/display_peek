@@ -18,12 +18,14 @@ unsafe impl Sync for Adapter {}
 
 impl Adapter {
     pub fn name(&self) -> Result<String> {
-        let desc: DXGI_ADAPTER_DESC3 = unsafe { self.0.GetDesc3()? };
+        let mut desc = Default::default();
+        unsafe { self.0.GetDesc3(&mut desc)? };
         Ok(convert_u16_to_string(&desc.Description))
     }
 
     pub fn luid(&self) -> Result<LUID> {
-        let desc: DXGI_ADAPTER_DESC3 = unsafe { self.0.GetDesc3()? };
+        let mut desc = Default::default();
+        unsafe { self.0.GetDesc3(&mut desc)? };
         Ok(desc.AdapterLuid)
     }
 

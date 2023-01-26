@@ -1,6 +1,7 @@
 use std::mem::size_of;
-use windows::Win32::Graphics::Direct3D11::{D3D11_APPEND_ALIGNED_ELEMENT, D3D11_BIND_INDEX_BUFFER, D3D11_BIND_VERTEX_BUFFER, D3D11_BUFFER_DESC, D3D11_INPUT_ELEMENT_DESC, D3D11_INPUT_PER_VERTEX_DATA, D3D11_SUBRESOURCE_DATA, D3D11_USAGE_DEFAULT, ID3D11Buffer, ID3D11InputLayout, ID3D11PixelShader, ID3D11SamplerState, ID3D11ShaderResourceView, ID3D11VertexShader};
+use windows::Win32::Graphics::Direct3D11::{D3D11_APPEND_ALIGNED_ELEMENT, D3D11_BIND_CONSTANT_BUFFER, D3D11_BIND_INDEX_BUFFER, D3D11_BIND_VERTEX_BUFFER, D3D11_BUFFER_DESC, D3D11_CPU_ACCESS_FLAG, D3D11_INPUT_ELEMENT_DESC, D3D11_INPUT_PER_VERTEX_DATA, D3D11_SUBRESOURCE_DATA, D3D11_USAGE_DEFAULT, ID3D11Buffer, ID3D11InputLayout, ID3D11PixelShader, ID3D11SamplerState, ID3D11ShaderResourceView, ID3D11VertexShader};
 use anyhow::Result;
+use glam::vec4;
 use windows::Win32::Graphics::Direct3D::D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_R32_UINT, DXGI_FORMAT_R32G32_FLOAT, DXGI_FORMAT_R32G32B32_FLOAT};
 use crate::directx::Direct3D;
@@ -31,13 +32,15 @@ pub struct QuadRenderer {
     index_buffer: ID3D11Buffer,
     vertex_shader: ID3D11VertexShader,
     pixel_shader: ID3D11PixelShader,
-    input_layout: ID3D11InputLayout
+    input_layout: ID3D11InputLayout,
+    constant_buffer: ID3D11Buffer
 }
 
 impl QuadRenderer {
 
     pub fn new(d3d: &Direct3D) -> Result<Self>{
         let vertex_buffer = unsafe {
+            let mut buffer = std::mem::zeroed();
             d3d.device.CreateBuffer(
                 &D3D11_BUFFER_DESC {
                     ByteWidth: size_of::<[Vertex; 4]>() as _,
@@ -49,9 +52,12 @@ impl QuadRenderer {
                     pSysMem: VERTICES.as_ptr() as _,
                     ..Default::default()
                 }),
-            )?
+                Some(&mut buffer)
+            )?;
+            buffer.unwrap()
         };
         let index_buffer = unsafe {
+            let mut buffer = std::mem::zeroed();
             d3d.device.CreateBuffer(
                 &D3D11_BUFFER_DESC {
                     ByteWidth: size_of::<[u32; 6]>() as _,
@@ -63,14 +69,24 @@ impl QuadRenderer {
                     pSysMem: INDICES.as_ptr() as _,
                     ..Default::default()
                 }),
-            )?
+                Some(&mut buffer)
+            )?;
+            buffer.unwrap()
         };
 
         let (vs, ps, input_layout) = unsafe {
             let vs_blob = include_bytes!(concat!(env!("OUT_DIR"), "/shader.vs_blob"));
             let ps_blob = include_bytes!(concat!(env!("OUT_DIR"), "/shader.ps_blob"));
-            let vs = d3d.device.CreateVertexShader(vs_blob, None)?;
-            let ps = d3d.device.CreatePixelShader(ps_blob, None)?;
+            let vs = {
+                let mut shader = std::mem::zeroed();
+                d3d.device.CreateVertexShader(vs_blob, None, Some(&mut shader))?;
+                shader.unwrap()
+            };
+            let ps = {
+                let mut shader = std::mem::zeroed();
+                d3d.device.CreatePixelShader(ps_blob, None,Some(&mut shader))?;
+                shader.unwrap()
+            };
             let descs = [
                 D3D11_INPUT_ELEMENT_DESC {
                     SemanticName: windows::s!("POSITION"),
@@ -91,8 +107,26 @@ impl QuadRenderer {
                     InstanceDataStepRate: 0,
                 },
             ];
-            let input_layout = d3d.device.CreateInputLayout(&descs, vs_blob)?;
+            let input_layout = {
+                let mut layout = std::mem::zeroed();
+                d3d.device.CreateInputLayout(&descs, vs_blob, Some(&mut layout))?;
+                layout.unwrap()
+            };
             (vs, ps, input_layout)
+        };
+
+        let constant_buffer = unsafe {
+            let mut buffer = std::mem::zeroed();
+            d3d.device.CreateBuffer(&D3D11_BUFFER_DESC {
+                    ByteWidth: 4 * 4,
+                    Usage: D3D11_USAGE_DEFAULT,
+                    BindFlags: D3D11_BIND_CONSTANT_BUFFER,
+                    ..Default::default()
+                },
+                None,
+                Some(&mut buffer)
+            )?;
+            buffer.unwrap()
         };
 
         Ok(Self {
@@ -101,6 +135,7 @@ impl QuadRenderer {
             vertex_shader: vs,
             pixel_shader: ps,
             input_layout,
+            constant_buffer,
         })
     }
 
@@ -117,14 +152,17 @@ impl QuadRenderer {
                 Some([0].as_ptr()),
             );
             d3d.context.VSSetShader(&self.vertex_shader, None);
+            d3d.context.VSSetConstantBuffers(0, Some(&[self.constant_buffer.clone()]));
             d3d.context.PSSetShader(&self.pixel_shader, None);
         }
     }
 
     pub fn draw(&self, d3d: &Direct3D, sampler: &ID3D11SamplerState, texture: &ID3D11ShaderResourceView) {
         unsafe {
-            d3d.context.PSSetSamplers(0, Some(&[Some(sampler.clone())]));
-            d3d.context.PSSetShaderResources(0, Some(&[Some(texture.clone())]));
+            let offset = vec4(1.0, 1.0, 0.0, 0.0);
+            d3d.context.UpdateSubresource(&self.constant_buffer, 0, None, [1.0f32, 1.0, 0.0, 0.0].as_ptr() as _, 0, 0);
+            d3d.context.PSSetSamplers(0, Some(&[sampler.clone()]));
+            d3d.context.PSSetShaderResources(0, Some(&[texture.clone()]));
             d3d.context.DrawIndexed(INDICES.len() as _, 0, 0);
         }
 

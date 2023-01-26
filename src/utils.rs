@@ -11,7 +11,7 @@ fn find_terminal_idx(content: &[u16]) -> usize {
 
 pub fn convert_u16_to_string(data: &[u16]) -> String {
     let terminal_idx = find_terminal_idx(data);
-    HSTRING::from_wide(&data[0..terminal_idx]).to_string_lossy()
+    HSTRING::from_wide(&data[0..terminal_idx]).unwrap().to_string_lossy()
 }
 
 pub struct U8Iter {

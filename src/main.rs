@@ -9,7 +9,6 @@ use std::mem::size_of;
 use std::ptr::null;
 use log::LevelFilter;
 use mltg::{CompositeMode, Interpolation};
-use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 use windows::Win32::Graphics::Gdi::HMONITOR;
 use tao::{dpi::*, event::*, event_loop::*, window::*};
 use tao::keyboard::Key;
@@ -23,7 +22,6 @@ use windows::s;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Direct3D11::{D3D11_APPEND_ALIGNED_ELEMENT, D3D11_BIND_INDEX_BUFFER, D3D11_BIND_VERTEX_BUFFER, D3D11_BUFFER_DESC, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_CREATE_DEVICE_DEBUG, D3D11_CREATE_DEVICE_FLAG, D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_INPUT_ELEMENT_DESC, D3D11_INPUT_PER_VERTEX_DATA, D3D11_SAMPLER_DESC, D3D11_SDK_VERSION, D3D11_SUBRESOURCE_DATA, D3D11_TEXTURE_ADDRESS_CLAMP, D3D11_USAGE_DEFAULT, D3D11_VIEWPORT, D3D11CreateDevice, ID3D11DeviceContext4, ID3D11RenderTargetView, ID3D11Texture2D};
 use windows::Win32::Graphics::Direct3D::{D3D_DRIVER_TYPE_HARDWARE, D3D_DRIVER_TYPE_UNKNOWN, D3D_FEATURE_LEVEL_11_1, D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST};
-use windows::Win32::Graphics::Direct3D::Fxc::D3DCompile;
 use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, DXGI_SCALING_NONE, DXGI_SWAP_CHAIN_DESC1, DXGI_SWAP_EFFECT_FLIP_DISCARD, DXGI_USAGE_RENDER_TARGET_OUTPUT, IDXGIFactory2};
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R32_UINT, DXGI_FORMAT_R32G32_FLOAT, DXGI_FORMAT_R32G32B32_FLOAT, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_UNKNOWN, DXGI_SAMPLE_DESC};
 use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx};
@@ -84,6 +82,7 @@ fn main() -> anyhow::Result<()> {
 
 
     let sampler = unsafe {
+        let mut sampler = std::mem::zeroed();
         d3d.device.CreateSamplerState(&D3D11_SAMPLER_DESC {
             Filter: D3D11_FILTER_MIN_MAG_MIP_LINEAR,
             AddressU: D3D11_TEXTURE_ADDRESS_CLAMP,
@@ -94,7 +93,8 @@ fn main() -> anyhow::Result<()> {
             MaxAnisotropy: 1,
             MipLODBias: 0.0,
             ..Default::default()
-        })?
+        }, Some(&mut sampler))?;
+        sampler.unwrap()
     };
 
     /*
@@ -123,11 +123,15 @@ fn main() -> anyhow::Result<()> {
                             MaxDepth: 1.0,
                             ..Default::default()
                         }]));
-                        d3d.context.OMSetRenderTargets(Some(&[Some(d3d.render_target().clone())]), None);
+                        d3d.context.OMSetRenderTargets(Some(&[d3d.render_target().clone()]), None);
                         //d3d.context.OMSetBlendState(&blend, None, u32::MAX);
 
                         quad_renderer.bind(&d3d);
-                        let tex_view = d3d.device.CreateShaderResourceView(tex, None).unwrap();
+                        let tex_view = {
+                            let mut view = std::mem::zeroed();
+                            d3d.device.CreateShaderResourceView(tex, None, Some(&mut view)).unwrap();
+                            view.unwrap()
+                        };
                         quad_renderer.draw(&d3d, &sampler, &tex_view);
 
                         d3d.swap_chain.Present(1, 0).unwrap();
