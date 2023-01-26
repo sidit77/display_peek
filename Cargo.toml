@@ -14,16 +14,15 @@ tauri-winres = "0.1"
 windows = {version = "0.44", features=["Win32_Graphics_Direct3D_Fxc"]}
 
 [dependencies]
-tao = { version = "0.16", features=["tray"]}
+tao = { version = "0.17", features=["tray"]}
 anyhow = { version = "1.0", features=["backtrace"] }
 env_logger = "0.10"
 log = "0.4"
 fps_counter = "2.0"
 glam = "0.22"
-mltg = { path="./lib/mltg" }
 
 [dependencies.windows-sys]
-version = ">= 0.43"
+version = "0.45"
 features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_Foundation",
@@ -31,7 +30,7 @@ features = [
 ]
 
 [dependencies.windows]
-version = ">= 0.43"
+version = "0.44"
 features = [
     "Win32_Foundation",
     "Win32_Graphics_Direct3D11",

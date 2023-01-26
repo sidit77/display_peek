@@ -9,7 +9,6 @@ use std::mem::size_of;
 use std::ptr::null;
 use glam::{Mat4, Quat, vec3};
 use log::LevelFilter;
-use mltg::{CompositeMode, Interpolation};
 use windows::Win32::Graphics::Gdi::HMONITOR;
 use tao::{dpi::*, event::*, event_loop::*, window::*};
 use tao::keyboard::Key;
@@ -161,6 +160,7 @@ fn main() -> anyhow::Result<()> {
                         quad_renderer.draw(&d3d, transform, &sampler, &tex_view);
 
                         d3d.swap_chain.Present(1, 0).unwrap();
+                        window.set_title(&format!("{} fps", fps.tick()))
                     }
                 }
                 /*

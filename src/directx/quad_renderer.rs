@@ -159,8 +159,9 @@ impl QuadRenderer {
 
     pub fn draw(&self, d3d: &Direct3D, transform: Mat4, sampler: &ID3D11SamplerState, texture: &ID3D11ShaderResourceView) {
         unsafe {
-            let transform = transform.transpose().as_ref().as_ptr();
-            d3d.context.UpdateSubresource(&self.constant_buffer, 0, None, transform as _, 0, 0);
+            let transposed = transform.transpose();
+            let ptr = transposed.as_ref().as_ptr() as _;
+            d3d.context.UpdateSubresource(&self.constant_buffer, 0, None, ptr, 0, 0);
             d3d.context.PSSetSamplers(0, Some(&[sampler.clone()]));
             d3d.context.PSSetShaderResources(0, Some(&[texture.clone()]));
             d3d.context.DrawIndexed(INDICES.len() as _, 0, 0);
