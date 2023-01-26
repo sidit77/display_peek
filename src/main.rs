@@ -28,24 +28,12 @@ use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, DXGI_SCALING_NONE, DXGI
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R32_UINT, DXGI_FORMAT_R32G32_FLOAT, DXGI_FORMAT_R32G32B32_FLOAT, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_UNKNOWN, DXGI_SAMPLE_DESC};
 use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx};
 use windows::Win32::UI::HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext};
-use crate::directx::{AdapterFactory, CursorType, DesktopDuplicationApi, Direct3D};
+use crate::directx::{AdapterFactory, CursorType, DesktopDuplicationApi, Direct3D, QuadRenderer};
 
 #[derive(Debug, Clone, Copy)]
 pub enum CustomEvent {
     CursorMonitorSwitch(HMONITOR),
     VBlank
-}
-
-#[repr(C)]
-struct Vertex {
-    position: [f32; 3],
-    tex: [f32; 2],
-}
-
-impl Vertex {
-    const fn new(position: [f32; 3], tex: [f32; 2]) -> Self {
-        Self { position, tex }
-    }
 }
 
 fn main() -> anyhow::Result<()> {
@@ -87,113 +75,14 @@ fn main() -> anyhow::Result<()> {
  */
 
     let mut d3d = Direct3D::new(&adapter, &window)?;
-    
+    let quad_renderer = QuadRenderer::new(&d3d)?;
+
     let mut dupl = DesktopDuplicationApi::new_with(
         d3d.device.clone(),
         d3d.context.clone(),
         output).unwrap();
 
 
-    let vertex_buffer = unsafe {
-        const VERTICES: [Vertex; 4] = [
-            Vertex::new([-1.0, 1.0, 0.0], [0.0, 0.0]),
-            Vertex::new([1.0, 1.0, 0.0], [1.0, 0.0]),
-            Vertex::new([-1.0, -1.0, 0.0], [0.0, 1.0]),
-            Vertex::new([1.0, -1.0, 0.0], [1.0, 1.0]),
-        ];
-        d3d.device.CreateBuffer(
-            &D3D11_BUFFER_DESC {
-                ByteWidth: size_of::<[Vertex; 4]>() as _,
-                Usage: D3D11_USAGE_DEFAULT,
-                BindFlags: D3D11_BIND_VERTEX_BUFFER,
-                ..Default::default()
-            },
-            Some(&D3D11_SUBRESOURCE_DATA {
-                pSysMem: VERTICES.as_ptr() as _,
-                ..Default::default()
-            }),
-        )?
-    };
-    let index_buffer = unsafe {
-        const INDICES: [u32; 6] = [0, 1, 2, 1, 3, 2];
-        d3d.device.CreateBuffer(
-            &D3D11_BUFFER_DESC {
-                ByteWidth: size_of::<[u32; 6]>() as _,
-                Usage: D3D11_USAGE_DEFAULT,
-                BindFlags: D3D11_BIND_INDEX_BUFFER,
-                ..Default::default()
-            },
-            Some(&D3D11_SUBRESOURCE_DATA {
-                pSysMem: INDICES.as_ptr() as _,
-                ..Default::default()
-            }),
-        )?
-    };
-    let (vs, ps, input_layout) = unsafe {
-        let hlsl_file = include_bytes!("shader.hlsl");
-        let mut vs_blob = None;
-        let mut ps_blob = None;
-        let vs_blob = D3DCompile(
-            hlsl_file.as_ptr() as _,
-            hlsl_file.len(),
-            windows::s!("shader.hlsl"),
-            None,
-            None,
-            windows::s!("vs_main"),
-            windows::s!("vs_5_0"),
-            0,
-            0,
-            &mut vs_blob,
-            None,
-        )
-            .map(|_| vs_blob.unwrap())?;
-        let ps_blob = D3DCompile(
-            hlsl_file.as_ptr() as _,
-            hlsl_file.len(),
-            windows::s!("shader.hlsl"),
-            None,
-            None,
-            windows::s!("ps_main"),
-            windows::s!("ps_5_0"),
-            0,
-            0,
-            &mut ps_blob,
-            None,
-        )
-            .map(|_| ps_blob.unwrap())?;
-        let vs_blob = std::slice::from_raw_parts(
-            vs_blob.GetBufferPointer() as *const u8,
-            vs_blob.GetBufferSize(),
-        );
-        let ps_blob = std::slice::from_raw_parts(
-            ps_blob.GetBufferPointer() as *const u8,
-            ps_blob.GetBufferSize(),
-        );
-        let vs = d3d.device.CreateVertexShader(&vs_blob, None)?;
-        let ps = d3d.device.CreatePixelShader(&ps_blob, None)?;
-        let descs = [
-            D3D11_INPUT_ELEMENT_DESC {
-                SemanticName: windows::s!("POSITION"),
-                SemanticIndex: 0,
-                Format: DXGI_FORMAT_R32G32B32_FLOAT,
-                InputSlot: 0,
-                AlignedByteOffset: 0,
-                InputSlotClass: D3D11_INPUT_PER_VERTEX_DATA,
-                InstanceDataStepRate: 0,
-            },
-            D3D11_INPUT_ELEMENT_DESC {
-                SemanticName: windows::s!("TEXCOORD"),
-                SemanticIndex: 0,
-                Format: DXGI_FORMAT_R32G32_FLOAT,
-                InputSlot: 0,
-                AlignedByteOffset: D3D11_APPEND_ALIGNED_ELEMENT,
-                InputSlotClass: D3D11_INPUT_PER_VERTEX_DATA,
-                InstanceDataStepRate: 0,
-            },
-        ];
-        let input_layout = d3d.device.CreateInputLayout(&descs, vs_blob)?;
-        (vs, ps, input_layout)
-    };
     let sampler = unsafe {
         d3d.device.CreateSamplerState(&D3D11_SAMPLER_DESC {
             Filter: D3D11_FILTER_MIN_MAG_MIP_LINEAR,
@@ -203,6 +92,7 @@ fn main() -> anyhow::Result<()> {
             MinLOD: f32::MIN,
             MaxLOD: f32::MAX,
             MaxAnisotropy: 1,
+            MipLODBias: 0.0,
             ..Default::default()
         })?
     };
@@ -226,25 +116,6 @@ fn main() -> anyhow::Result<()> {
 
                         d3d.context.ClearRenderTargetView(d3d.render_target(), [0.0, 1.0, 1.0, 1.0].as_ptr());
 
-                        d3d.context.IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-                        d3d.context.IASetInputLayout(&input_layout);
-                        d3d.context.IASetIndexBuffer(&index_buffer, DXGI_FORMAT_R32_UINT, 0);
-                        d3d.context.IASetVertexBuffers(
-                            0,
-                            1,
-                            Some([Some(vertex_buffer.clone())].as_mut_ptr()),
-                            Some([size_of::<Vertex>() as u32].as_ptr()),
-                            Some([0].as_ptr()),
-                        );
-
-                        d3d.context.OMSetRenderTargets(Some(&[Some(d3d.render_target().clone())]), None);
-                        //d3d.context.OMSetBlendState(&blend, None, u32::MAX);
-
-                        d3d.context.VSSetShader(&vs, None);
-                        d3d.context.PSSetShader(&ps, None);
-                        let tex_view = d3d.device.CreateShaderResourceView(tex, None).unwrap();
-                        d3d.context.PSSetShaderResources(0, Some(&[Some(tex_view)]));
-                        d3d.context.PSSetSamplers(0, Some(&[Some(sampler.clone())]));
 
                         d3d.context.RSSetViewports(Some(&[D3D11_VIEWPORT {
                             Width: window_size.width as f32,
@@ -252,7 +123,12 @@ fn main() -> anyhow::Result<()> {
                             MaxDepth: 1.0,
                             ..Default::default()
                         }]));
-                        d3d.context.DrawIndexed(6, 0, 0);
+                        d3d.context.OMSetRenderTargets(Some(&[Some(d3d.render_target().clone())]), None);
+                        //d3d.context.OMSetBlendState(&blend, None, u32::MAX);
+
+                        quad_renderer.bind(&d3d);
+                        let tex_view = d3d.device.CreateShaderResourceView(tex, None).unwrap();
+                        quad_renderer.draw(&d3d, &sampler, &tex_view);
 
                         d3d.swap_chain.Present(1, 0).unwrap();
                     }
