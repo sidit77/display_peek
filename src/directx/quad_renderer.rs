@@ -2,7 +2,6 @@ use std::mem::size_of;
 use windows::Win32::Graphics::Direct3D11::{D3D11_APPEND_ALIGNED_ELEMENT, D3D11_BIND_INDEX_BUFFER, D3D11_BIND_VERTEX_BUFFER, D3D11_BUFFER_DESC, D3D11_INPUT_ELEMENT_DESC, D3D11_INPUT_PER_VERTEX_DATA, D3D11_SUBRESOURCE_DATA, D3D11_USAGE_DEFAULT, ID3D11Buffer, ID3D11InputLayout, ID3D11PixelShader, ID3D11SamplerState, ID3D11ShaderResourceView, ID3D11VertexShader};
 use anyhow::Result;
 use windows::Win32::Graphics::Direct3D::D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-use windows::Win32::Graphics::Direct3D::Fxc::D3DCompile;
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_R32_UINT, DXGI_FORMAT_R32G32_FLOAT, DXGI_FORMAT_R32G32B32_FLOAT};
 use crate::directx::Direct3D;
 
@@ -68,47 +67,10 @@ impl QuadRenderer {
         };
 
         let (vs, ps, input_layout) = unsafe {
-            let hlsl_file = include_bytes!("shader.hlsl");
-            let mut vs_blob = None;
-            let mut ps_blob = None;
-            let vs_blob = D3DCompile(
-                hlsl_file.as_ptr() as _,
-                hlsl_file.len(),
-                windows::s!("shader.hlsl"),
-                None,
-                None,
-                windows::s!("vs_main"),
-                windows::s!("vs_5_0"),
-                0,
-                0,
-                &mut vs_blob,
-                None,
-            )
-                .map(|_| vs_blob.unwrap())?;
-            let ps_blob = D3DCompile(
-                hlsl_file.as_ptr() as _,
-                hlsl_file.len(),
-                windows::s!("shader.hlsl"),
-                None,
-                None,
-                windows::s!("ps_main"),
-                windows::s!("ps_5_0"),
-                0,
-                0,
-                &mut ps_blob,
-                None,
-            )
-                .map(|_| ps_blob.unwrap())?;
-            let vs_blob = std::slice::from_raw_parts(
-                vs_blob.GetBufferPointer() as *const u8,
-                vs_blob.GetBufferSize(),
-            );
-            let ps_blob = std::slice::from_raw_parts(
-                ps_blob.GetBufferPointer() as *const u8,
-                ps_blob.GetBufferSize(),
-            );
-            let vs = d3d.device.CreateVertexShader(&vs_blob, None)?;
-            let ps = d3d.device.CreatePixelShader(&ps_blob, None)?;
+            let vs_blob = include_bytes!(concat!(env!("OUT_DIR"), "/shader.vs_blob"));
+            let ps_blob = include_bytes!(concat!(env!("OUT_DIR"), "/shader.ps_blob"));
+            let vs = d3d.device.CreateVertexShader(vs_blob, None)?;
+            let ps = d3d.device.CreatePixelShader(ps_blob, None)?;
             let descs = [
                 D3D11_INPUT_ELEMENT_DESC {
                     SemanticName: windows::s!("POSITION"),
