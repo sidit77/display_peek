@@ -16,7 +16,7 @@ use tao::menu::ContextMenu;
 use tao::platform::run_return::EventLoopExtRunReturn;
 use tao::platform::windows::{IconExtWindows, WindowBuilderExtWindows};
 use tao::system_tray::SystemTrayBuilder;
-use windows::Win32::Graphics::Direct3D11::{D3D11_BLEND_INV_DEST_COLOR, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_INV_SRC_COLOR, D3D11_BLEND_ONE, D3D11_BLEND_SRC_COLOR, D3D11_BLEND_ZERO, D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_SAMPLER_DESC, D3D11_TEXTURE_ADDRESS_CLAMP, D3D11_VIEWPORT};
+use windows::Win32::Graphics::Direct3D11::{D3D11_BLEND_INV_DEST_COLOR, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_INV_SRC_COLOR, D3D11_BLEND_ONE, D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_SRC_COLOR, D3D11_BLEND_ZERO, D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_SAMPLER_DESC, D3D11_TEXTURE_ADDRESS_CLAMP, D3D11_VIEWPORT};
 use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx};
 use windows::Win32::UI::HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext};
 use crate::directx::{AdapterFactory, CursorType, DesktopDuplicationApi, Direct3D, QuadRenderer};
@@ -95,6 +95,9 @@ fn main() -> anyhow::Result<()> {
 
     let blend_state_monochrome_1 = make_blend_state(&d3d.device, D3D11_BLEND_ZERO, D3D11_BLEND_SRC_COLOR)?;
     let blend_state_monochrome_2 = make_blend_state(&d3d.device, D3D11_BLEND_INV_DEST_COLOR, D3D11_BLEND_INV_SRC_COLOR)?;
+
+    let blend_state_masked_1 = make_blend_state(&d3d.device, D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_INV_SRC_ALPHA)?;
+    let blend_state_masked_2 = make_blend_state(&d3d.device, D3D11_BLEND_INV_DEST_COLOR, D3D11_BLEND_INV_SRC_COLOR)?;
 
     /*
     let mut render_target = ctx.create_render_target(
@@ -175,7 +178,12 @@ fn main() -> anyhow::Result<()> {
                                     d3d.context.OMSetBlendState(&blend_state_monochrome_2, None, u32::MAX);
                                     quad_renderer.draw(&d3d, transform, &sampler, cursor.mask_srv.as_ref().unwrap());
                                 }
-                                CursorType::MaskedColor => {}
+                                CursorType::MaskedColor => {
+                                    d3d.context.OMSetBlendState(&blend_state_masked_1, None, u32::MAX);
+                                    quad_renderer.draw(&d3d, transform, &sampler, cursor.norm_srv.as_ref().unwrap());
+                                    d3d.context.OMSetBlendState(&blend_state_masked_2, None, u32::MAX);
+                                    quad_renderer.draw(&d3d, transform, &sampler, cursor.mask_srv.as_ref().unwrap());
+                                }
                             }
 
                         }

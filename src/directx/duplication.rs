@@ -398,8 +398,37 @@ impl Cursor {
                     xor_buffer.as_ptr() as _);
                 self.state.cursor_bitmap = Some(CursorType::MaskedColor(and_tex, xor_tex));
                  */
-                log::warn!("cursor type not implemented");
-                return None;
+                let (color_buffer, xor_buffer): (Vec<u32>, Vec<u32>) = data
+                    .chunks_exact(4)
+                    .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
+                    .map(|c| match (c & 0xFF000000) != 0 {
+                        //wfe
+                        true => (c & 0x00FFFFFF, c & 0x00FFFFFF),
+                        false => (c | 0xFF000000, 0xFF000000)
+                    })
+                    .unzip();
+
+                let (norm_tex, norm_srv) = make_texture(device, info.Width, info.Height);
+                unsafe {
+                    context.UpdateSubresource(&norm_tex, 0, None, color_buffer.as_ptr() as _,
+                                              size_of::<u32>() as u32 * info.Width,size_of::<u32>() as u32 * info.Width * info.Height);
+                    context.GenerateMips(&norm_srv);
+                }
+                let (mask_tex, mask_srv) = make_texture(device, info.Width, info.Height);
+                unsafe {
+                    context.UpdateSubresource(&mask_tex, 0, None, xor_buffer.as_ptr() as _,
+                                              size_of::<u32>() as u32 * info.Width,size_of::<u32>() as u32 * info.Width * info.Height);
+                    context.GenerateMips(&mask_srv);
+                }
+                return return Some(Self {
+                    cursor_type: CursorType::MaskedColor,
+                    width: info.Width,
+                    height: info.Height,
+                    norm_tex: Some(norm_tex),
+                    norm_srv: Some(norm_srv),
+                    mask_tex: Some(mask_tex),
+                    mask_srv: Some(mask_srv),
+                });
             },
             _ => unreachable!()
         }
