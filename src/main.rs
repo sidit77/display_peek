@@ -7,7 +7,7 @@ mod directx;
 
 use std::mem::size_of;
 use std::ptr::null;
-use glam::{Mat4, vec3};
+use glam::{Mat4, Quat, vec3};
 use log::LevelFilter;
 use mltg::{CompositeMode, Interpolation};
 use windows::Win32::Graphics::Gdi::HMONITOR;
@@ -113,9 +113,15 @@ fn main() -> anyhow::Result<()> {
                 if let Some(tex) = dupl.get_frame() {
                     unsafe {
                         let window_size = window.inner_size();
+                        let screenspace = Mat4::orthographic_rh(
+                            0.0,
+                            window_size.width as f32,
+                            window_size.height as f32,
+                            0.0,
+                            -1.0,
+                            1.0);
 
-
-                        d3d.context.ClearRenderTargetView(d3d.render_target(), [0.0, 1.0, 1.0, 1.0].as_ptr());
+                        d3d.context.ClearRenderTargetView(d3d.render_target(), [0.0, 0.0, 0.3, 1.0].as_ptr());
 
 
                         d3d.context.RSSetViewports(Some(&[D3D11_VIEWPORT {
@@ -133,7 +139,25 @@ fn main() -> anyhow::Result<()> {
                             d3d.device.CreateShaderResourceView(tex, None, Some(&mut view)).unwrap();
                             view.unwrap()
                         };
-                        let transform = Mat4::from_translation(vec3(1.0, 1.0, 0.0));
+
+                        let aspect = 1920 as f32 / 1080 as  f32;
+                        let width = (window_size.width as f32).min(window_size.height as f32 * aspect);
+                        let height = width / aspect;
+                        let x = 0.5 * (window_size.width as f32 - width);
+                        let y = 0.5 * (window_size.height as f32 - height);
+                        let scale = height / 1080 as f32;
+
+                        let screenspace = screenspace * Mat4::from_scale_rotation_translation(
+                            vec3(scale, scale, 0.0),
+                            Quat::IDENTITY,
+                            vec3(x, y, 0.0)
+                        );
+
+                        let transform = screenspace * Mat4::from_scale_rotation_translation(
+                            vec3(1920.0, 1080.0, 0.0),
+                            Quat::IDENTITY,
+                            vec3(0.0, 0.0, 0.0)
+                        );
                         quad_renderer.draw(&d3d, transform, &sampler, &tex_view);
 
                         d3d.swap_chain.Present(1, 0).unwrap();
