@@ -7,6 +7,7 @@ mod directx;
 
 use std::mem::size_of;
 use std::ptr::null;
+use glam::{Mat4, vec3};
 use log::LevelFilter;
 use mltg::{CompositeMode, Interpolation};
 use windows::Win32::Graphics::Gdi::HMONITOR;
@@ -132,7 +133,8 @@ fn main() -> anyhow::Result<()> {
                             d3d.device.CreateShaderResourceView(tex, None, Some(&mut view)).unwrap();
                             view.unwrap()
                         };
-                        quad_renderer.draw(&d3d, &sampler, &tex_view);
+                        let transform = Mat4::from_translation(vec3(1.0, 1.0, 0.0));
+                        quad_renderer.draw(&d3d, transform, &sampler, &tex_view);
 
                         d3d.swap_chain.Present(1, 0).unwrap();
                     }

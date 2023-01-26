@@ -1,7 +1,7 @@
 use std::mem::size_of;
 use windows::Win32::Graphics::Direct3D11::{D3D11_APPEND_ALIGNED_ELEMENT, D3D11_BIND_CONSTANT_BUFFER, D3D11_BIND_INDEX_BUFFER, D3D11_BIND_VERTEX_BUFFER, D3D11_BUFFER_DESC, D3D11_CPU_ACCESS_FLAG, D3D11_INPUT_ELEMENT_DESC, D3D11_INPUT_PER_VERTEX_DATA, D3D11_SUBRESOURCE_DATA, D3D11_USAGE_DEFAULT, ID3D11Buffer, ID3D11InputLayout, ID3D11PixelShader, ID3D11SamplerState, ID3D11ShaderResourceView, ID3D11VertexShader};
 use anyhow::Result;
-use glam::vec4;
+use glam::{Mat4, vec3, vec4};
 use windows::Win32::Graphics::Direct3D::D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_R32_UINT, DXGI_FORMAT_R32G32_FLOAT, DXGI_FORMAT_R32G32B32_FLOAT};
 use crate::directx::Direct3D;
@@ -118,7 +118,7 @@ impl QuadRenderer {
         let constant_buffer = unsafe {
             let mut buffer = std::mem::zeroed();
             d3d.device.CreateBuffer(&D3D11_BUFFER_DESC {
-                    ByteWidth: 4 * 4,
+                    ByteWidth: size_of::<Mat4>() as _,
                     Usage: D3D11_USAGE_DEFAULT,
                     BindFlags: D3D11_BIND_CONSTANT_BUFFER,
                     ..Default::default()
@@ -157,10 +157,10 @@ impl QuadRenderer {
         }
     }
 
-    pub fn draw(&self, d3d: &Direct3D, sampler: &ID3D11SamplerState, texture: &ID3D11ShaderResourceView) {
+    pub fn draw(&self, d3d: &Direct3D, transform: Mat4, sampler: &ID3D11SamplerState, texture: &ID3D11ShaderResourceView) {
         unsafe {
-            let offset = vec4(1.0, 1.0, 0.0, 0.0);
-            d3d.context.UpdateSubresource(&self.constant_buffer, 0, None, [1.0f32, 1.0, 0.0, 0.0].as_ptr() as _, 0, 0);
+            let transform = transform.transpose().as_ref().as_ptr();
+            d3d.context.UpdateSubresource(&self.constant_buffer, 0, None, transform as _, 0, 0);
             d3d.context.PSSetSamplers(0, Some(&[sampler.clone()]));
             d3d.context.PSSetShaderResources(0, Some(&[texture.clone()]));
             d3d.context.DrawIndexed(INDICES.len() as _, 0, 0);
