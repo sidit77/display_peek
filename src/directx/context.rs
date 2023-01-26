@@ -62,7 +62,7 @@ impl Direct3D {
             )?
         };
 
-        let mut rtv = unsafe {
+        let rtv = unsafe {
             let buffer = swap_chain.GetBuffer::<ID3D11Texture2D>(0)?;
             let mut target = std::mem::zeroed();
             d3d_device.CreateRenderTargetView(&buffer, None, Some(&mut target))?;
