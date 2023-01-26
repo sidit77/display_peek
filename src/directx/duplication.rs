@@ -1,3 +1,4 @@
+use std::mem::size_of;
 use log::{debug, error, trace, warn};
 use windows::Win32::Graphics::Direct3D11::{D3D11_BIND_RENDER_TARGET, D3D11_BIND_SHADER_RESOURCE, D3D11_CPU_ACCESS_FLAG, D3D11_RESOURCE_MISC_FLAG, D3D11_RESOURCE_MISC_GENERATE_MIPS, D3D11_SUBRESOURCE_DATA, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT, ID3D11Device, ID3D11Device4, ID3D11DeviceContext4, ID3D11ShaderResourceView, ID3D11Texture2D};
 use windows::Win32::Graphics::Dxgi::{DXGI_OUTDUPL_POINTER_SHAPE_TYPE, DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME, DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR, DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MASKED_COLOR, DXGI_OUTDUPL_POINTER_SHAPE_INFO, DXGI_ERROR_UNSUPPORTED, DXGI_ERROR_SESSION_DISCONNECTED, IDXGIDevice4, IDXGIOutputDuplication, DXGI_ERROR_ACCESS_LOST, DXGI_ERROR_ACCESS_DENIED, DXGI_ERROR_INVALID_CALL, DXGI_ERROR_WAIT_TIMEOUT, IDXGIResource};
@@ -310,68 +311,56 @@ pub struct Cursor {
     pub cursor_type: CursorType,
     pub width: u32,
     pub height: u32,
-    pub norm_tex: ID3D11Texture2D,
-    pub norm_srv: ID3D11ShaderResourceView
+    pub norm_tex: Option<ID3D11Texture2D>,
+    pub norm_srv: Option<ID3D11ShaderResourceView>,
+    pub mask_tex: Option<ID3D11Texture2D>,
+    pub mask_srv: Option<ID3D11ShaderResourceView>
 }
 
 impl Cursor {
     fn new(device: &ID3D11Device4, context: &ID3D11DeviceContext4, data: &[u8], info: &DXGI_OUTDUPL_POINTER_SHAPE_INFO) -> Option<Self> {
         match DXGI_OUTDUPL_POINTER_SHAPE_TYPE(info.Type as i32) {
             DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME => {
-                /*
-                let (and_mask, xor_mask) = cursor_buffer.split_at((shape.Pitch * shape.Height / 2) as usize);
+                let (and_mask, xor_mask) = data.split_at((info.Pitch * info.Height / 2) as usize);
                 assert_eq!(and_mask.len(), xor_mask.len());
                 let and_buffer: Vec<u32> = and_mask
                     .into_iter()
                     .flat_map(|mask|U8Iter::new(*mask))
-                    .map(|b | if b {0x00000000} else {0xFF000000})
+                    .map(|b | if b {0xFFFFFFFF} else {0xFF000000})
                     .collect();
 
-                let and_tex = self.create_cursor_bitmap(
-                    shape.Width,
-                    shape.Height / 2,
-                    and_buffer.as_ptr() as _);
+                let (norm_tex, norm_srv) = make_texture(device, info.Width, info.Height / 2);
+                unsafe {
+                    context.UpdateSubresource(&norm_tex, 0, None, and_buffer.as_ptr() as _,
+                                              size_of::<u32>() as u32 * info.Width,size_of::<u32>() as u32 * info.Width * info.Height / 2);
+                    context.GenerateMips(&norm_srv);
+                }
 
                 let xor_buffer: Vec<u32> = xor_mask
                     .into_iter()
                     .flat_map(|mask|U8Iter::new(*mask))
-                    .map(|b | if b {0xFFFFFFFF} else {0x00000000})
+                    .map(|b | if b {0x00FFFFFF} else {0x00000000})
                     .collect();
 
-                let xor_tex = self.create_cursor_bitmap(
-                    shape.Width,
-                    shape.Height / 2,
-                    xor_buffer.as_ptr() as _);
-                self.state.cursor_bitmap = Some(CursorType::Monochrome(and_tex, xor_tex));
-                 */
-                log::warn!("cursor type not implemented");
-                return None
+                let (mask_tex, mask_srv) = make_texture(device, info.Width, info.Height / 2);
+                unsafe {
+                    context.UpdateSubresource(&mask_tex, 0, None, xor_buffer.as_ptr() as _,
+                    size_of::<u32>() as u32 * info.Width,size_of::<u32>() as u32 * info.Width * info.Height / 2);
+                    context.GenerateMips(&mask_srv);
+                }
+
+                return Some(Self {
+                    cursor_type: CursorType::Monochrome,
+                    width: info.Width,
+                    height: info.Height / 2,
+                    norm_tex: Some(norm_tex),
+                    norm_srv: Some(norm_srv),
+                    mask_tex: Some(mask_tex),
+                    mask_srv: Some(mask_srv),
+                })
             },
             DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR => {
-                let tex = unsafe {
-                    let mut tex = std::mem::zeroed();
-                    device.CreateTexture2D(&D3D11_TEXTURE2D_DESC {
-                        Width: info.Width,
-                        Height: info.Height,
-                        MipLevels: 0,
-                        ArraySize: 1,
-                        Format: DXGI_FORMAT_R8G8B8A8_UNORM,
-                        SampleDesc: DXGI_SAMPLE_DESC {
-                            Count: 1,
-                            Quality: 0,
-                        },
-                        Usage: D3D11_USAGE_DEFAULT,
-                        BindFlags: D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET,
-                        CPUAccessFlags: D3D11_CPU_ACCESS_FLAG(0),
-                        MiscFlags: D3D11_RESOURCE_MISC_GENERATE_MIPS,
-                    }, None, Some(&mut tex)).unwrap();
-                    tex.unwrap()
-                };
-                let srv = unsafe {
-                    let mut srv = std::mem::zeroed();
-                    device.CreateShaderResourceView(&tex, None, Some(&mut srv)).unwrap();
-                    srv.unwrap()
-                };
+                let (tex, srv) = make_texture(device, info.Width, info.Height);
                 unsafe {
                     context.UpdateSubresource(&tex, 0, None, data.as_ptr() as _, info.Pitch ,info.Pitch * info.Height);
                     context.GenerateMips(&srv);
@@ -380,8 +369,10 @@ impl Cursor {
                     cursor_type: CursorType::Color,
                     width: info.Width,
                     height: info.Height,
-                    norm_tex: tex,
-                    norm_srv: srv,
+                    norm_tex: Some(tex),
+                    norm_srv: Some(srv),
+                    mask_tex: None,
+                    mask_srv: None,
                 });
             },
             DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MASKED_COLOR => {
@@ -413,6 +404,34 @@ impl Cursor {
             _ => unreachable!()
         }
     }
+}
+
+fn make_texture(device: &ID3D11Device4, width: u32, height: u32) -> (ID3D11Texture2D, ID3D11ShaderResourceView) {
+    let tex = unsafe {
+        let mut tex = std::mem::zeroed();
+        device.CreateTexture2D(&D3D11_TEXTURE2D_DESC {
+            Width: width,
+            Height: height,
+            MipLevels: 0,
+            ArraySize: 1,
+            Format: DXGI_FORMAT_R8G8B8A8_UNORM,
+            SampleDesc: DXGI_SAMPLE_DESC {
+                Count: 1,
+                Quality: 0,
+            },
+            Usage: D3D11_USAGE_DEFAULT,
+            BindFlags: D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET,
+            CPUAccessFlags: D3D11_CPU_ACCESS_FLAG(0),
+            MiscFlags: D3D11_RESOURCE_MISC_GENERATE_MIPS,
+        }, None, Some(&mut tex)).unwrap();
+        tex.unwrap()
+    };
+    let srv = unsafe {
+        let mut srv = std::mem::zeroed();
+        device.CreateShaderResourceView(&tex, None, Some(&mut srv)).unwrap();
+        srv.unwrap()
+    };
+    (tex, srv)
 }
 
 /// Settings to configure Desktop duplication api. these can be configured even after initialized.
