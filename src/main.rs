@@ -31,7 +31,7 @@ pub enum CustomEvent {
 fn main() -> anyhow::Result<()> {
     env_logger::builder()
         .filter_level(LevelFilter::Trace)
-        .filter(Some("desktop_display::directx::duplication"), LevelFilter::Debug)
+        //.filter(Some("desktop_display::directx::duplication"), LevelFilter::Debug)
         .format_timestamp(None)
         //.format_target(false)
         .init();
@@ -170,19 +170,19 @@ fn main() -> anyhow::Result<()> {
                             match cursor.cursor_type {
                                 CursorType::Color => {
                                     d3d.context.OMSetBlendState(&blend_state_color, None, u32::MAX);
-                                    quad_renderer.draw(&d3d, transform, &sampler, cursor.norm_srv.as_ref().unwrap());
+                                    quad_renderer.draw(&d3d, transform, &sampler, cursor.norm_srv());
                                 }
                                 CursorType::Monochrome => {
                                     d3d.context.OMSetBlendState(&blend_state_monochrome_1, None, u32::MAX);
-                                    quad_renderer.draw(&d3d, transform, &sampler, cursor.norm_srv.as_ref().unwrap());
+                                    quad_renderer.draw(&d3d, transform, &sampler, cursor.norm_srv());
                                     d3d.context.OMSetBlendState(&blend_state_monochrome_2, None, u32::MAX);
-                                    quad_renderer.draw(&d3d, transform, &sampler, cursor.mask_srv.as_ref().unwrap());
+                                    quad_renderer.draw(&d3d, transform, &sampler, cursor.mask_srv());
                                 }
                                 CursorType::MaskedColor => {
                                     d3d.context.OMSetBlendState(&blend_state_masked_1, None, u32::MAX);
-                                    quad_renderer.draw(&d3d, transform, &sampler, cursor.norm_srv.as_ref().unwrap());
+                                    quad_renderer.draw(&d3d, transform, &sampler, cursor.norm_srv());
                                     d3d.context.OMSetBlendState(&blend_state_masked_2, None, u32::MAX);
-                                    quad_renderer.draw(&d3d, transform, &sampler, cursor.mask_srv.as_ref().unwrap());
+                                    quad_renderer.draw(&d3d, transform, &sampler, cursor.mask_srv());
                                 }
                             }
 
