@@ -16,10 +16,11 @@ use tao::menu::ContextMenu;
 use tao::platform::run_return::EventLoopExtRunReturn;
 use tao::platform::windows::{IconExtWindows, WindowBuilderExtWindows};
 use tao::system_tray::SystemTrayBuilder;
-use windows::Win32::Graphics::Direct3D11::{D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_SAMPLER_DESC, D3D11_TEXTURE_ADDRESS_CLAMP, D3D11_VIEWPORT};
+use windows::Win32::Graphics::Direct3D11::{D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_ONE, D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_SAMPLER_DESC, D3D11_TEXTURE_ADDRESS_CLAMP, D3D11_VIEWPORT};
 use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx};
 use windows::Win32::UI::HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext};
 use crate::directx::{AdapterFactory, DesktopDuplicationApi, Direct3D, QuadRenderer};
+use crate::utils::make_blend_state;
 
 #[derive(Debug, Clone, Copy)]
 pub enum CustomEvent {
@@ -90,6 +91,8 @@ fn main() -> anyhow::Result<()> {
         sampler.unwrap()
     };
 
+    let blend_state = make_blend_state(&d3d.device, D3D11_BLEND_ONE, D3D11_BLEND_INV_SRC_ALPHA)?;
+
     /*
     let mut render_target = ctx.create_render_target(
         window.raw_window_handle(),
@@ -123,7 +126,6 @@ fn main() -> anyhow::Result<()> {
                             ..Default::default()
                         }]));
                         d3d.context.OMSetRenderTargets(Some(&[d3d.render_target().clone()]), None);
-                        //d3d.context.OMSetBlendState(&blend, None, u32::MAX);
 
                         quad_renderer.bind(&d3d);
                         let tex_view = {
@@ -150,7 +152,18 @@ fn main() -> anyhow::Result<()> {
                             Quat::IDENTITY,
                             vec3(0.0, 0.0, 0.0)
                         );
+                        d3d.context.OMSetBlendState(None, None, u32::MAX);
                         quad_renderer.draw(&d3d, transform, &sampler, &tex_view);
+
+                        if let Some((pt, cursor)) = dupl.get_cursor() {
+                            let transform = screenspace * Mat4::from_scale_rotation_translation(
+                                vec3(cursor.width as f32, cursor.height as f32, 0.0),
+                                Quat::IDENTITY,
+                                vec3(pt.x as f32, pt.y as f32, 0.0)
+                            );
+                            d3d.context.OMSetBlendState(&blend_state, None, u32::MAX);
+                            quad_renderer.draw(&d3d, transform, &sampler, &cursor.norm_srv);
+                        }
 
                         d3d.swap_chain.Present(1, 0).unwrap();
                         window.set_title(&format!("{} fps", fps.tick()))
