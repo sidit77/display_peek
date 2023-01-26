@@ -38,7 +38,7 @@ impl Adapter {
     }
 
     pub fn get_display_by_idx(&self, idx: u32) -> Option<Display> {
-        DisplayIterator::get_display_by_idx(&self, idx)
+        DisplayIterator::get_display_by_idx(self, idx)
     }
 }
 
@@ -109,20 +109,12 @@ impl AdapterFactory {
 
     pub fn get_adapter_by_idx(&self, idx: u32) -> Option<Adapter> {
         let adapter = unsafe { self.fac.EnumAdapterByGpuPreference(idx, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE) };
-        if adapter.is_ok() {
-            Some(Adapter(adapter.unwrap()))
-        } else {
-            None
-        }
+        adapter.ok().map(Adapter)
     }
 
     pub fn get_adapter_by_luid(&self, luid: LUID) -> Option<Adapter> {
         let adapter = unsafe { self.fac.EnumAdapterByLuid(luid) };
-        if adapter.is_ok() {
-            Some(Adapter(adapter.unwrap()))
-        } else {
-            None
-        }
+        adapter.ok().map(Adapter)
     }
 
     pub fn reset(&mut self) {
