@@ -59,7 +59,7 @@ fn main() -> anyhow::Result<()> {
     let mut tray_menu = ContextMenu::new();
     let quit_item = tray_menu.add_item(MenuItemAttributes::new("Quit"));
     let _tray = SystemTrayBuilder::new(Icon::from_resource(32512, None)?, Some(tray_menu))
-        .with_tooltip("Window Peek")
+        .with_tooltip("DisplayPeek")
         .build(&event_loop)?;
 
     let mut d3d = Direct3D::new(&adapter, &window)?;
