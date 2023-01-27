@@ -285,21 +285,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b365fabc795046672053e29c954733ec3b05e4be654ab130fe8f1f94d7051f35"
 
 [[package]]
-name = "desktop_display"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "env_logger",
- "fps_counter",
- "glam",
- "log",
- "tao",
- "tauri-winres",
- "windows 0.44.0",
- "windows-sys 0.45.0",
-]
-
-[[package]]
 name = "dirs-next"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -325,6 +310,21 @@ name = "dispatch"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd0c93bb4b0c6d9b77f4435b0ae98c24d17f1c45b2ff844c6151a07256ca923b"
+
+[[package]]
+name = "display_peek"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "env_logger",
+ "fps_counter",
+ "glam",
+ "log",
+ "tao",
+ "tauri-winres",
+ "windows 0.44.0",
+ "windows-sys 0.45.0",
+]
 
 [[package]]
 name = "env_logger"
