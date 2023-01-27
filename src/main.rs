@@ -19,7 +19,7 @@ use tao::system_tray::SystemTrayBuilder;
 use windows::Win32::Graphics::Direct3D11::{D3D11_BLEND_INV_DEST_COLOR, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_INV_SRC_COLOR, D3D11_BLEND_ONE, D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_SRC_COLOR, D3D11_BLEND_ZERO, D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_SAMPLER_DESC, D3D11_TEXTURE_ADDRESS_CLAMP, D3D11_VIEWPORT};
 use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx};
 use windows::Win32::UI::HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext};
-use crate::directx::{AdapterFactory, CursorType, DesktopDuplicationApi, Direct3D, QuadRenderer};
+use crate::directx::{AdapterFactory, CursorType, DesktopDuplicationApi, Direct3D, DisplayOrientation, QuadRenderer};
 use crate::utils::make_blend_state;
 
 #[derive(Debug, Clone, Copy)]
@@ -54,6 +54,7 @@ fn main() -> anyhow::Result<()> {
         .build(&event_loop)?;
     let _tracker = cursor_tracker::set_hook(&event_loop);
     let vsync_switcher = vsync_helper::start_vsync_thread(&event_loop, output.clone());
+    let mut display_mode = output.get_current_display_mode()?;
 
     let mut tray_menu = ContextMenu::new();
     let quit_item = tray_menu.add_item(MenuItemAttributes::new("Quit"));
@@ -100,7 +101,7 @@ fn main() -> anyhow::Result<()> {
         *control_flow = ControlFlow::Wait;
         match event {
             Event::RedrawRequested(_) => {
-                if let Some((tex, frame_width, frame_height)) = dupl.get_frame() {
+                if let Some(tex) = dupl.get_frame() {
                     unsafe {
                         let window_size = window.inner_size();
                         let screenspace = Mat4::orthographic_rh(
@@ -129,12 +130,13 @@ fn main() -> anyhow::Result<()> {
                             view.unwrap()
                         };
 
-                        let aspect = frame_width as f32 / frame_height as  f32;
+                        let (display_width, display_height) = display_mode.get_flipped_size();
+                        let aspect = display_width as f32 / display_height as  f32;
                         let width = (window_size.width as f32).min(window_size.height as f32 * aspect);
                         let height = width / aspect;
                         let x = 0.5 * (window_size.width as f32 - width);
                         let y = 0.5 * (window_size.height as f32 - height);
-                        let scale = height / frame_height as f32;
+                        let scale = height / display_height as f32;
 
                         let screenspace = screenspace * Mat4::from_scale_rotation_translation(
                             vec3(scale, scale, 0.0),
@@ -142,11 +144,7 @@ fn main() -> anyhow::Result<()> {
                             vec3(x, y, 0.0)
                         );
 
-                        let transform = screenspace * Mat4::from_scale_rotation_translation(
-                            vec3(frame_width as f32, frame_height as f32, 0.0),
-                            Quat::IDENTITY,
-                            vec3(0.0, 0.0, 0.0)
-                        );
+                        let transform = screenspace * display_mode.get_frame_transform();
                         d3d.context.OMSetBlendState(None, None, u32::MAX);
                         quad_renderer.draw(&d3d, transform, &sampler, &tex_view);
 
@@ -188,8 +186,9 @@ fn main() -> anyhow::Result<()> {
                 match adapter.iter_displays().find(|d|d.hmonitor().unwrap() == monitor) {
                     None => log::warn!("Cannot find the correct display"),
                     Some(display) => {
-                        dupl.switch_output(display.clone()).unwrap();
-                        vsync_switcher.change_display(display);
+                        dupl.switch_output(display).unwrap();
+                        display_mode = dupl.get_current_output().get_current_display_mode().unwrap();
+                        vsync_switcher.change_display(dupl.get_current_output().clone());
                     }
                 }
 
@@ -199,7 +198,10 @@ fn main() -> anyhow::Result<()> {
                 match dupl.try_acquire_next_frame() {
                     Ok(true) => window.request_redraw(),
                     Ok(false) => {},
-                    Err(err) => log::error!("error aquiring frame: {}", err),
+                    Err(err) => {
+                        log::error!("error aquiring frame: {}", err);
+                        display_mode = dupl.get_current_output().get_current_display_mode().unwrap();
+                    },
                 }
             },
             Event::WindowEvent { event: WindowEvent::Resized(size), .. } => {

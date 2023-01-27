@@ -110,12 +110,8 @@ impl DesktopDuplicationApi {
         Ok(true)
     }
 
-    pub fn get_frame(&self) -> Option<(&ID3D11Texture2D, u32, u32)> {
-        self.state.frame.as_ref().map(|tex| {
-            let mut desc = Default::default();
-            unsafe { tex.GetDesc(&mut desc); }
-            (tex, desc.Width, desc.Height)
-        })
+    pub fn get_frame(&self) -> Option<&ID3D11Texture2D> {
+        self.state.frame.as_ref()
     }
 
     pub fn get_cursor(&self) -> Option<(POINT, &Cursor)> {
@@ -126,6 +122,10 @@ impl DesktopDuplicationApi {
         self.output = display;
         self.reacquire_dup()?;
         Ok(())
+    }
+
+    pub fn get_current_output(&self) -> &Display {
+        &self.output
     }
 
     fn reacquire_dup(&mut self) -> Result<()> {

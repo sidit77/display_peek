@@ -9,6 +9,7 @@ use windows::core::{PCSTR};
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT, DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R8G8B8A8_UNORM};
 use windows::Win32::Graphics::Gdi::{CDS_TYPE, ChangeDisplaySettingsExA, DEVMODE_DISPLAY_ORIENTATION, DEVMODEA, DISP_CHANGE_SUCCESSFUL, DM_BITSPERPEL, DM_DISPLAYFREQUENCY, DM_DISPLAYORIENTATION, DM_PELSHEIGHT, DM_PELSWIDTH, DMDO_180, DMDO_270, DMDO_90, DMDO_DEFAULT, ENUM_CURRENT_SETTINGS, EnumDisplaySettingsExA, HMONITOR};
 use anyhow::{anyhow, Context, Result};
+use glam::{Mat4, Quat, vec3};
 use crate::utils::convert_u16_to_string;
 
 #[repr(transparent)]
@@ -186,4 +187,33 @@ pub struct DisplayMode {
     pub refresh_num: u32,
     pub refresh_den: u32,
     pub hdr: bool,
+}
+
+impl DisplayMode {
+
+    pub fn get_flipped_size(self) -> (u32, u32) {
+        match self.orientation {
+            DisplayOrientation::Landscape | DisplayOrientation::FlippedLandscape => (self.width, self.height),
+            DisplayOrientation::FlippedPortrait | DisplayOrientation::Portrait => (self.height, self.width)
+        }
+    }
+
+    pub fn get_frame_transform(self) -> Mat4 {
+        Mat4::from_scale_rotation_translation(
+            vec3(self.width as f32, self.height as f32, 0.0),
+            match self.orientation {
+                DisplayOrientation::Landscape => Quat::from_rotation_z(0f32.to_radians()),
+                DisplayOrientation::Portrait => Quat::from_rotation_z(90f32.to_radians()),
+                DisplayOrientation::FlippedLandscape => Quat::from_rotation_z(180f32.to_radians()),
+                DisplayOrientation::FlippedPortrait => Quat::from_rotation_z(270f32.to_radians()),
+            },
+            match self.orientation {
+                DisplayOrientation::Landscape => vec3(0.0, 0.0, 0.0),
+                DisplayOrientation::Portrait => vec3(self.height as f32, 0.0, 0.0),
+                DisplayOrientation::FlippedLandscape => vec3(self.width as f32, self.height as f32, 0.0),
+                DisplayOrientation::FlippedPortrait => vec3(0.0, self.width as f32, 0.0),
+            },
+        )
+    }
+
 }
