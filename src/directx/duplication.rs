@@ -8,13 +8,14 @@ use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FO
 use windows::Win32::System::StationsAndDesktops::{OpenInputDesktop, SetThreadDesktop, DF_ALLOWOTHERACCOUNTHOOK, DESKTOP_ACCESS_FLAGS};
 use anyhow::Result;
 use windows::Win32::System::SystemServices::GENERIC_READ;
-use crate::directx::Display;
+use crate::directx::{Display, DisplayMode};
 use crate::utils::U8Iter;
 
 pub struct DesktopDuplicationApi {
     d3d_device: ID3D11Device4,
     d3d_ctx: ID3D11DeviceContext4,
     output: Display,
+    display_mode: DisplayMode,
     dupl: Option<IDXGIOutputDuplication>,
     state: DuplicationState,
 }
@@ -28,10 +29,12 @@ impl DesktopDuplicationApi {
     pub fn new_with(d3d_device: ID3D11Device, d3d_ctx: ID3D11DeviceContext4, output: Display) -> Result<Self> {
         let d3d_device = d3d_device.cast()?;
         let dupl = Self::create_dupl_output(&d3d_device, &output)?;
+        let display_mode = output.get_current_display_mode()?;
         Ok(Self {
             d3d_device,
             d3d_ctx,
             output,
+            display_mode,
             dupl: Some(dupl),
             state: Default::default(),
         })
@@ -118,10 +121,14 @@ impl DesktopDuplicationApi {
         self.state.cursor_pos.zip(self.state.cursor_bitmap.as_ref())
     }
 
-    pub fn switch_output(&mut self, display: Display) -> Result<()>{
-        self.output = display;
-        self.reacquire_dup()?;
-        Ok(())
+    //pub fn switch_output(&mut self, display: Display) -> Result<()>{
+    //    self.output = display;
+    //    self.reacquire_dup()?;
+    //    Ok(())
+    //}
+
+    pub fn get_display_mode(&self) -> DisplayMode {
+        self.display_mode
     }
 
     pub fn get_current_output(&self) -> &Display {
@@ -139,6 +146,7 @@ impl DesktopDuplicationApi {
         let dupl = dupl?;
         log::trace!("successfully acquired new duplication instance");
         self.dupl = Some(dupl);
+        self.display_mode = self.output.get_current_display_mode()?;
         Ok(())
     }
 
