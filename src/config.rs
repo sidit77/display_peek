@@ -1,7 +1,11 @@
 use std::path::PathBuf;
 use directories_next::BaseDirs;
+use notify::{RecommendedWatcher, Watcher, RecursiveMode};
 use serde::Deserialize;
 use tao::dpi::{LogicalPosition, LogicalSize};
+use tao::event_loop::EventLoop;
+use anyhow::Result;
+use crate::CustomEvent;
 
 #[derive(Debug, Clone, Copy, Deserialize)]
 pub struct OverlayConfig {
@@ -15,7 +19,6 @@ pub struct OverlayOverride {
     pub size: Option<LogicalSize<f64>>
 }
 
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct MonitorConfig {
     pub name: String,
@@ -28,6 +31,8 @@ pub struct Config {
     pub monitors: Vec<MonitorConfig>
 }
 
+pub struct ConfigWatcher(RecommendedWatcher);
+
 impl Config {
 
     pub fn path() -> PathBuf {
@@ -36,7 +41,25 @@ impl Config {
         config_dir.join("DisplayPeek.toml")
     }
 
+    pub fn create_watcher(event_loop: &EventLoop<CustomEvent>) -> Result<ConfigWatcher> {
+        let proxy = event_loop.create_proxy();
+        let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+            match res {
+                Ok(event) => {
+                    if event.kind.is_modify() {
+                        proxy.send_event(CustomEvent::ConfigChange).unwrap();
+                    }
+                },
+                Err(e) => log::warn!("watch error: {:?}", e),
+            };
+        })?;
+        watcher.watch(&Self::path(), RecursiveMode::NonRecursive)?;
+        Ok(ConfigWatcher(watcher))
+    }
+
     pub fn load() -> Config {
+
+
         let config: Config = toml::from_str(&std::fs::read_to_string(Self::path()).unwrap()).unwrap();
         config
     }

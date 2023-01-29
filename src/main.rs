@@ -26,7 +26,8 @@ use crate::utils::make_blend_state;
 #[derive(Debug, Clone, Copy)]
 pub enum CustomEvent {
     CursorMonitorSwitch(HMONITOR),
-    VBlank
+    VBlank,
+    ConfigChange
 }
 
 fn main() -> anyhow::Result<()> {
@@ -59,6 +60,8 @@ fn main() -> anyhow::Result<()> {
     window.set_ignore_cursor_events(true)?;
     let _tracker = cursor_tracker::set_hook(&event_loop);
     let vsync_switcher = vsync_helper::start_vsync_thread(&event_loop, None);
+    let _config_watcher = Config::create_watcher(&event_loop)?;
+
 
     let mut tray_menu = ContextMenu::new();
     let config_item = tray_menu.add_item(MenuItemAttributes::new("Open Config"));
@@ -220,17 +223,20 @@ fn main() -> anyhow::Result<()> {
                     }
                 }
             },
+            Event::UserEvent(CustomEvent::ConfigChange) => {
+                log::debug!("Reloading config");
+                config = Config::load();
+                reload_state();
+            }
             Event::WindowEvent { event: WindowEvent::Resized(size), .. } => {
                d3d.resize(size.width, size.height).unwrap();
-
             }
             Event::MenuEvent { menu_id, origin: MenuType::ContextMenu, .. } => {
                 if menu_id == quit_item.clone().id() {
                     *control_flow = ControlFlow::Exit;
                 }
                 if menu_id == config_item.clone().id() {
-                    config = Config::load();
-                    reload_state();
+                    open::that(Config::path()).unwrap();
                 }
             }
             Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {

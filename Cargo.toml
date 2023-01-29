@@ -22,6 +22,8 @@ glam = "0.22"
 directories-next = "2.0"
 serde = "1.0"
 toml = "0.7"
+notify = "5.1"
+open = "3.2"
 
 [dependencies.windows-sys]
 version = "0.45"
