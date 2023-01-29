@@ -5,6 +5,7 @@ use tao::event_loop::{EventLoop, EventLoopProxy};
 use windows_sys::Win32::Foundation::{LPARAM, LRESULT, POINT, RECT, TRUE, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{GetMonitorInfoW, HMONITOR, MONITOR_DEFAULTTONEAREST, MonitorFromPoint, MONITORINFO};
 use windows_sys::Win32::UI::WindowsAndMessaging::{CallNextHookEx, GetCursorPos, HHOOK, MSLLHOOKSTRUCT, SetWindowsHookExW, UnhookWindowsHookEx, WH_MOUSE_LL, WM_MOUSEMOVE};
+use windows::Win32::Graphics::Gdi::HMONITOR as WinHMonitor;
 use crate::CustomEvent;
 
 struct CursorTrackerContext {
@@ -45,7 +46,7 @@ unsafe extern "system" fn ll_mouse_proc(code: i32, wparam: WPARAM, lparam: LPARA
                         if let Some(info) = get_monitor_info(monitor) {
                             ctx.current_monitor_info = info;
                             ctx.current_monitor = monitor;
-                            let monitor = windows::Win32::Graphics::Gdi::HMONITOR(monitor);
+                            let monitor = WinHMonitor(monitor);
                             if let Err(e) = ctx.event_loop_proxy.send_event(CustomEvent::CursorMonitorSwitch(monitor)){
                                 log::warn!("Cannot send event: {}", e);
                             }
@@ -68,7 +69,7 @@ impl Drop for CursorTrackerHandle {
     }
 }
 
-fn get_current_monitor() -> Option<HMONITOR> {
+fn get_current_monitor_sys() -> Option<HMONITOR> {
     unsafe {
         let mut pt = zeroed();
         match GetCursorPos(&mut pt) {
@@ -79,9 +80,13 @@ fn get_current_monitor() -> Option<HMONITOR> {
 
 }
 
+pub fn get_current_monitor() -> WinHMonitor {
+    WinHMonitor(get_current_monitor_sys().unwrap())
+}
+
 #[must_use]
 pub fn set_hook(event_loop: &EventLoop<CustomEvent>) -> CursorTrackerHandle {
-    let monitor = get_current_monitor().unwrap();
+    let monitor = get_current_monitor_sys().unwrap();
     let info = get_monitor_info(monitor).unwrap();
     let result = CONTEXT.with(|ctx| {
         let mut ctx = ctx.borrow_mut();

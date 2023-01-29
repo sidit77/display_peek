@@ -4,6 +4,7 @@ use windows::core::{Interface};
 use windows::Win32::Foundation::LUID;
 use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory2, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IDXGIAdapter4, IDXGIFactory6};
 use anyhow::Result;
+use windows::Win32::Graphics::Gdi::HMONITOR;
 use crate::directx::Display;
 
 use crate::utils::convert_u16_to_string;
@@ -39,6 +40,10 @@ impl Adapter {
 
     pub fn get_display_by_idx(&self, idx: u32) -> Option<Display> {
         DisplayIterator::get_display_by_idx(self, idx)
+    }
+
+    pub fn get_display_by_handle(&self, handle: HMONITOR) -> Option<Display> {
+        self.iter_displays().find(|d|d.hmonitor().ok() == Some(handle))
     }
 }
 

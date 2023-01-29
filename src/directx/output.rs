@@ -16,6 +16,14 @@ use crate::utils::convert_u16_to_string;
 #[derive(Clone)]
 pub struct Display(IDXGIOutput6);
 
+impl PartialEq<Self> for Display {
+    fn eq(&self, other: &Self) -> bool {
+        self.hmonitor().ok() == other.hmonitor().ok()
+    }
+}
+
+impl Eq for Display {}
+
 impl Display {
     pub fn new(output: IDXGIOutput6) -> Self {
         Self(output)
@@ -72,7 +80,6 @@ impl Display {
         }
     }
 
-    /// get current [display mode][DisplayMode] of this monitor.
     pub fn get_current_display_mode(&self) -> Result<DisplayMode> {
         let name = self.name()?;
         let name = CString::new(name).unwrap();
@@ -102,17 +109,14 @@ impl Display {
         }
     }
 
-    /// this is not very async friendly use [get_vsync_stream][Display::get_vsync_stream]
     pub fn wait_for_vsync(&self) -> Result<()> {
         unsafe { self.0.WaitForVBlank().context("DisplaySyncStream received a sync error. Maybe monitor disconnected?") }
     }
 
-    /// returns internal IDXGIOutput6 reference
     pub fn as_raw_ref(&self) -> &IDXGIOutput6 {
         &self.0
     }
 
-    // internal function
     fn fill_modes(&self, format: DXGI_FORMAT, hdr: bool, mode_list: &mut Vec<DisplayMode>) -> Result<()> {
         let mut num_modes: u32 = 0;
         if let Err(e) = unsafe { self.0.GetDisplayModeList1(format, 0, &mut num_modes, Some(null_mut())) } {

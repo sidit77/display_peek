@@ -96,6 +96,12 @@ fn main() -> anyhow::Result<()> {
     let blend_state_masked_1 = make_blend_state(&d3d.device, D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_INV_SRC_ALPHA)?;
     let blend_state_masked_2 = make_blend_state(&d3d.device, D3D11_BLEND_INV_DEST_COLOR, D3D11_BLEND_INV_SRC_COLOR)?;
 
+    let reload_state = {
+        let proxy = event_loop.create_proxy();
+        move || proxy.send_event(CustomEvent::CursorMonitorSwitch(cursor_tracker::get_current_monitor())).unwrap_or_default()
+    };
+    reload_state();
+
     event_loop.run_return(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
         match event {
@@ -113,7 +119,6 @@ fn main() -> anyhow::Result<()> {
                                 1.0);
 
                             d3d.context.ClearRenderTargetView(d3d.render_target(), [0.0, 0.0, 0.3, 1.0].as_ptr());
-
 
                             d3d.context.RSSetViewports(Some(&[D3D11_VIEWPORT {
                                 Width: window_size.width as f32,
@@ -181,9 +186,7 @@ fn main() -> anyhow::Result<()> {
                 }
             },
             Event::UserEvent(CustomEvent::CursorMonitorSwitch(monitor)) => {
-                //let monitor: winit::monitor::MonitorHandle = unsafe {std::mem::transmute(monitor)};
-
-                match adapter.iter_displays().find(|d|d.hmonitor().unwrap() == monitor) {
+                match adapter.get_display_by_handle(monitor) {
                     None => log::warn!("Cannot find the correct display"),
                     Some(display) => match config.get_overlay_config(&display.name().unwrap()) {
                         None => {
@@ -192,8 +195,13 @@ fn main() -> anyhow::Result<()> {
                             window.set_visible(false);
                         }
                         Some(overlay_config) => {
-                            let dupl = dupl.insert(DesktopDuplicationApi::new_with(d3d.device.clone(), d3d.context.clone(), display).unwrap());//.switch_output(display).unwrap();
-                            vsync_switcher.change_display(dupl.get_current_output().clone());
+                            let equals = dupl.as_ref().map(|d| d.get_current_output() == &display);
+                            if !equals.unwrap_or(false) {
+                                dupl.take();
+                                let new_dupl = DesktopDuplicationApi::new_with(d3d.device.clone(), d3d.context.clone(), display).unwrap();//.switch_output(display).unwrap();
+                                vsync_switcher.change_display(new_dupl.get_current_output().clone());
+                                dupl = Some(new_dupl);
+                            }
                             window.set_outer_position(overlay_config.position);
                             window.set_inner_size(overlay_config.size);
                             window.set_visible(true);
@@ -222,6 +230,7 @@ fn main() -> anyhow::Result<()> {
                 }
                 if menu_id == config_item.clone().id() {
                     config = Config::load();
+                    reload_state();
                 }
             }
             Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
