@@ -8,6 +8,7 @@ use windows::Win32::Graphics::Direct3D::{D3D_DRIVER_TYPE_UNKNOWN, D3D_FEATURE_LE
 use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, DXGI_SCALING_NONE, DXGI_SWAP_CHAIN_DESC1, DXGI_SWAP_EFFECT_FLIP_DISCARD, DXGI_USAGE_RENDER_TARGET_OUTPUT, IDXGIFactory2, IDXGISwapChain1};
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_UNKNOWN, DXGI_SAMPLE_DESC};
 use crate::directx::Adapter;
+use crate::utils::EnsureOptionExt;
 
 pub struct Direct3D {
     pub device: ID3D11Device,
@@ -34,8 +35,8 @@ impl Direct3D {
                 Some(&mut d3d_ctx),
             )?;
         }
-        let d3d_device = d3d_device.unwrap();
-        let d3d_ctx = d3d_ctx.unwrap().cast::<ID3D11DeviceContext4>()?;
+        let d3d_device = d3d_device.ensure()?;
+        let d3d_ctx = d3d_ctx.ensure()?.cast::<ID3D11DeviceContext4>()?;
 
         let dxgi_factory = unsafe { CreateDXGIFactory1::<IDXGIFactory2>()? };
         let window_size = window.inner_size();
@@ -66,7 +67,7 @@ impl Direct3D {
             let buffer = swap_chain.GetBuffer::<ID3D11Texture2D>(0)?;
             let mut target = std::mem::zeroed();
             d3d_device.CreateRenderTargetView(&buffer, None, Some(&mut target))?;
-            target.unwrap()
+            target.ensure()?
         };
 
         Ok(Self {
@@ -78,7 +79,8 @@ impl Direct3D {
     }
 
     pub fn render_target(&self) -> &ID3D11RenderTargetView {
-        self.render_target.as_ref().unwrap()
+        self.render_target.as_ref()
+            .expect("The rendertarget should never not be initialized")
     }
 
     pub fn resize(&mut self, width: u32, height: u32) -> Result<()> {
@@ -86,7 +88,7 @@ impl Direct3D {
             self.context.OMSetRenderTargets(None, None);
             self.render_target = None;
             self.swap_chain.ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0)?;
-            let buffer = self.swap_chain.GetBuffer::<ID3D11Texture2D>(0).unwrap();
+            let buffer = self.swap_chain.GetBuffer::<ID3D11Texture2D>(0)?;
             self.device.CreateRenderTargetView(&buffer, None, Some(&mut self.render_target))?;
             Ok(())
         }

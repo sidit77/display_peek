@@ -50,7 +50,7 @@ impl Display {
 
     pub fn set_display_mode(&self, mode: &DisplayMode) -> Result<()> {
         let name = self.name()?;
-        let name = CString::new(name).unwrap();
+        let name = CString::new(name)?;
         let mut display_mode = DEVMODEA {
             ..Default::default()
         };
@@ -82,7 +82,7 @@ impl Display {
 
     pub fn get_current_display_mode(&self) -> Result<DisplayMode> {
         let name = self.name()?;
-        let name = CString::new(name).unwrap();
+        let name = CString::new(name)?;
 
         let mut mode: DEVMODEA = DEVMODEA {
             dmSize: size_of::<DEVMODEA>() as _,

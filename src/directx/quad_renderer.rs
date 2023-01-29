@@ -5,6 +5,7 @@ use glam::Mat4;
 use windows::Win32::Graphics::Direct3D::D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_R32_UINT, DXGI_FORMAT_R32G32_FLOAT, DXGI_FORMAT_R32G32B32_FLOAT};
 use crate::directx::Direct3D;
+use crate::utils::EnsureOptionExt;
 
 #[repr(C)]
 struct Vertex {
@@ -55,7 +56,7 @@ impl QuadRenderer {
                 }),
                 Some(&mut buffer)
             )?;
-            buffer.unwrap()
+            buffer.ensure()?
         };
         let index_buffer = unsafe {
             let mut buffer = std::mem::zeroed();
@@ -72,7 +73,7 @@ impl QuadRenderer {
                 }),
                 Some(&mut buffer)
             )?;
-            buffer.unwrap()
+            buffer.ensure()?
         };
 
         let (vs, ps, input_layout) = unsafe {
@@ -81,12 +82,12 @@ impl QuadRenderer {
             let vs = {
                 let mut shader = std::mem::zeroed();
                 d3d.device.CreateVertexShader(vs_blob, None, Some(&mut shader))?;
-                shader.unwrap()
+                shader.ensure()?
             };
             let ps = {
                 let mut shader = std::mem::zeroed();
                 d3d.device.CreatePixelShader(ps_blob, None,Some(&mut shader))?;
-                shader.unwrap()
+                shader.ensure()?
             };
             let descs = [
                 D3D11_INPUT_ELEMENT_DESC {
@@ -111,7 +112,7 @@ impl QuadRenderer {
             let input_layout = {
                 let mut layout = std::mem::zeroed();
                 d3d.device.CreateInputLayout(&descs, vs_blob, Some(&mut layout))?;
-                layout.unwrap()
+                layout.ensure()?
             };
             (vs, ps, input_layout)
         };
@@ -127,7 +128,7 @@ impl QuadRenderer {
                 None,
                 Some(&mut buffer)
             )?;
-            buffer.unwrap()
+            buffer.ensure()?
         };
 
         let sampler = unsafe {
@@ -143,7 +144,7 @@ impl QuadRenderer {
                 MipLODBias: 0.0,
                 ..Default::default()
             }, Some(&mut sampler))?;
-            sampler.unwrap()
+            sampler.ensure()?
         };
 
         Ok(Self {

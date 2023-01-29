@@ -4,9 +4,10 @@ use windows::core::Interface;
 use windows::Win32::Foundation::{POINT, GetLastError};
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R16G16B16A16_FLOAT};
 use windows::Win32::System::StationsAndDesktops::{OpenInputDesktop, SetThreadDesktop, DF_ALLOWOTHERACCOUNTHOOK, DESKTOP_ACCESS_FLAGS};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use windows::Win32::System::SystemServices::GENERIC_READ;
 use crate::directx::{Display, DisplayMode};
+use crate::utils::EnsureOptionExt;
 
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
 pub struct AcquisitionResults {
@@ -52,7 +53,7 @@ impl DesktopDuplication {
         if self.dupl.is_none() {
             self.reacquire_dup()?;
         }
-        let dupl = self.dupl.as_ref().unwrap();
+        let dupl = self.dupl.as_ref().ensure()?;
         let mut resource = unsafe {std::mem::zeroed()};
         let status = unsafe { dupl.AcquireNextFrame(0, &mut frame_info, &mut resource) };
         if let Err(e) = status {
@@ -68,7 +69,7 @@ impl DesktopDuplication {
         }
 
         match resource {
-            Some(resource) => self.frame = Some(resource.cast().unwrap()),
+            Some(resource) => self.frame = Some(resource.cast()?),
             None => return Err(anyhow::anyhow!("Resource is null"))
         }
         result.success = true;
@@ -88,7 +89,7 @@ impl DesktopDuplication {
                     cursor_data.data.len() as u32,
                     cursor_data.data.as_mut_ptr() as _,
                     &mut used_size,
-                    &mut info).unwrap();
+                    &mut info)?;
             }
             cursor_data.cursor_type = info.Type.into();
             cursor_data.width = info.Width;
@@ -147,19 +148,16 @@ impl DesktopDuplication {
 
     fn release_locked_frame(&mut self) {
         self.frame = None;
-        if self.dupl.is_some() {
-            let _ = unsafe { self.dupl.as_ref().unwrap().ReleaseFrame() };
+        if let Some(dupl) = self.dupl.as_ref() {
+            let _ = unsafe { dupl.ReleaseFrame() };
         }
     }
 
     fn switch_thread_desktop() -> Result<()> {
         log::trace!("trying to switch Thread desktop");
-        let desk = unsafe { OpenInputDesktop(DF_ALLOWOTHERACCOUNTHOOK as _, true, DESKTOP_ACCESS_FLAGS(GENERIC_READ)) };
-        if let Err(err) = desk {
-            log::error!("didnt get desktop : {:?}", err);
-            return Err(anyhow::anyhow!("AccessDenied"));
-        }
-        let result = unsafe { SetThreadDesktop(desk.unwrap()) };
+        let desk = unsafe { OpenInputDesktop(DF_ALLOWOTHERACCOUNTHOOK as _, true, DESKTOP_ACCESS_FLAGS(GENERIC_READ))
+            .context("AccessDenied")? };
+        let result = unsafe { SetThreadDesktop(desk) };
         if !result.as_bool() {
             log::error!("didnt switch desktop: {:?}",unsafe{GetLastError().to_hresult()});
             return Err(anyhow::anyhow!("AccessDenied"));

@@ -64,7 +64,7 @@ impl DisplayIterator {
     fn get_display_by_idx(adapter: &Adapter, idx: u32) -> Option<Display> {
         let output = unsafe { adapter.0.EnumOutputs(idx) };
         match output {
-            Ok(output) => Some(Display::new(output.cast().unwrap())),
+            Ok(output) => Some(Display::new(output.cast().expect("Can not cast"))),
             Err(_) => None
         }
     }
@@ -94,21 +94,15 @@ unsafe impl Send for AdapterFactory {}
 
 unsafe impl Sync for AdapterFactory {}
 
-impl Default for AdapterFactory {
-    fn default() -> Self {
-        AdapterFactory::new()
-    }
-}
-
 impl AdapterFactory {
 
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self> {
         unsafe {
-            let dxgi_factory: IDXGIFactory6 = CreateDXGIFactory2(0).unwrap();
-            Self {
+            let dxgi_factory: IDXGIFactory6 = CreateDXGIFactory2(0)?;
+            Ok(Self {
                 fac: dxgi_factory,
                 count: 0,
-            }
+            })
         }
     }
 

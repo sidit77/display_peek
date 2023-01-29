@@ -31,6 +31,7 @@ pub struct Config {
     pub monitors: Vec<MonitorConfig>
 }
 
+#[must_use]
 pub struct ConfigWatcher(RecommendedWatcher);
 
 impl Config {
@@ -46,8 +47,8 @@ impl Config {
         let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
             match res {
                 Ok(event) => {
-                    if event.kind.is_modify() {
-                        proxy.send_event(CustomEvent::ConfigChange).unwrap();
+                    if event.kind.is_modify() && proxy.send_event(CustomEvent::ConfigChange).is_err() {
+                        log::warn!("Cannot send config change event to eventloop");
                     }
                 },
                 Err(e) => log::warn!("watch error: {:?}", e),
