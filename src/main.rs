@@ -65,7 +65,7 @@ fn run() -> anyhow::Result<()> {
     let mut event_loop = EventLoop::with_user_event();
     let window = WindowBuilder::new()
         .with_visible(false)
-        .with_title("DisplayPeek")
+        .with_title("Display Peek")
         .with_drag_and_drop(false)
         .with_decorations(false)
         .with_always_on_top(true)
@@ -79,10 +79,12 @@ fn run() -> anyhow::Result<()> {
 
 
     let mut tray_menu = ContextMenu::new();
+    let _version_item = tray_menu.add_item(MenuItemAttributes::new(concat!("Display Peek (version ", env!("CARGO_PKG_VERSION"), ")"))
+        .with_enabled(false));
     let config_item = tray_menu.add_item(MenuItemAttributes::new("Open Config"));
     let quit_item = tray_menu.add_item(MenuItemAttributes::new("Quit"));
     let _tray = SystemTrayBuilder::new(Icon::from_resource(32512, None)?, Some(tray_menu))
-        .with_tooltip("DisplayPeek")
+        .with_tooltip("Display Peek")
         .build(&event_loop)?;
 
     let mut d3d = Direct3D::new(&adapter, &window)?;
