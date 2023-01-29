@@ -6,7 +6,9 @@ mod utils;
 mod directx;
 mod config;
 
+use std::ops::Add;
 use std::ptr::null;
+use std::time::{Duration, Instant};
 use glam::{Mat4, Quat, vec3};
 use log::LevelFilter;
 use windows::Win32::Graphics::Gdi::HMONITOR;
@@ -104,6 +106,8 @@ fn main() -> anyhow::Result<()> {
         move || proxy.send_event(CustomEvent::CursorMonitorSwitch(cursor_tracker::get_current_monitor())).unwrap_or_default()
     };
     reload_state();
+
+    let mut reload_timer: Option<Instant> = None;
 
     event_loop.run_return(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -224,9 +228,19 @@ fn main() -> anyhow::Result<()> {
                 }
             },
             Event::UserEvent(CustomEvent::ConfigChange) => {
-                log::debug!("Reloading config");
-                config = Config::load();
-                reload_state();
+                log::trace!("Config modified");
+                reload_timer = Some(Instant::now().add(Duration::from_secs_f32(0.25)));
+                *control_flow = ControlFlow::WaitUntil(reload_timer.unwrap());
+            },
+            Event::NewEvents(_) => {
+                if let Some(timer) = reload_timer {
+                    if timer.checked_duration_since(Instant::now()).is_none() {
+                        log::debug!("Reloading config");
+                        config = Config::load();
+                        reload_timer = None;
+                        reload_state();
+                    }
+                }
             }
             Event::WindowEvent { event: WindowEvent::Resized(size), .. } => {
                d3d.resize(size.width, size.height).unwrap();
