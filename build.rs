@@ -4,11 +4,11 @@ use windows::Win32::Graphics::Direct3D::Fxc::D3DCompile;
 #[cfg(windows)]
 fn main() {
     let mut res = tauri_winres::WindowsResource::new();
-    res.set_icon("icon.ico");
+    res.set_icon("resources/icon.ico");
     res.compile().unwrap();
 
-    println!("cargo:rerun-if-changed=shader.hlsl");
-    let hlsl_file = std::fs::read("shader.hlsl").unwrap();
+    println!("cargo:rerun-if-changed=resources/shader.hlsl");
+    let hlsl_file = std::fs::read("resources/shader.hlsl").unwrap();
     let mut vs_blob = None;
     let mut ps_blob = None;
     let vs_blob = unsafe {

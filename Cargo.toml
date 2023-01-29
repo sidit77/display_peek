@@ -14,12 +14,14 @@ tauri-winres = "0.1"
 windows = {version = "0.44", features=["Win32_Graphics_Direct3D_Fxc"]}
 
 [dependencies]
-tao = { version = "0.17", features=["tray"]}
+tao = { version = "0.17", features=["tray", "serde"]}
 anyhow = { version = "1.0", features=["backtrace"] }
 env_logger = "0.10"
 log = "0.4"
-fps_counter = "2.0"
 glam = "0.22"
+directories-next = "2.0"
+serde = "1.0"
+toml = "0.7"
 
 [dependencies.windows-sys]
 version = "0.45"

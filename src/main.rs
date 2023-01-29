@@ -4,6 +4,7 @@ mod cursor_tracker;
 mod vsync_helper;
 mod utils;
 mod directx;
+mod config;
 
 use std::ptr::null;
 use glam::{Mat4, Quat, vec3};
@@ -18,6 +19,7 @@ use tao::system_tray::SystemTrayBuilder;
 use windows::Win32::Graphics::Direct3D11::{D3D11_BLEND_INV_DEST_COLOR, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_INV_SRC_COLOR, D3D11_BLEND_ONE, D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_SRC_COLOR, D3D11_BLEND_ZERO, D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_SAMPLER_DESC, D3D11_TEXTURE_ADDRESS_CLAMP, D3D11_VIEWPORT};
 use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx};
 use windows::Win32::UI::HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext};
+use crate::config::Config;
 use crate::directx::{AdapterFactory, CursorType, DesktopDuplicationApi, Direct3D, QuadRenderer};
 use crate::utils::make_blend_state;
 
@@ -38,6 +40,8 @@ fn main() -> anyhow::Result<()> {
     unsafe { SetProcessDpiAwarenessContext(Some(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)); }
     unsafe { CoInitializeEx(Some(null()), COINIT_MULTITHREADED)?; }
 
+    let mut config = Config::load();
+
     let adapter = AdapterFactory::new().get_adapter_by_idx(0).unwrap();
 
     let mut event_loop = EventLoop::with_user_event();
@@ -57,6 +61,7 @@ fn main() -> anyhow::Result<()> {
     let vsync_switcher = vsync_helper::start_vsync_thread(&event_loop, None);
 
     let mut tray_menu = ContextMenu::new();
+    let config_item = tray_menu.add_item(MenuItemAttributes::new("Open Config"));
     let quit_item = tray_menu.add_item(MenuItemAttributes::new("Quit"));
     let _tray = SystemTrayBuilder::new(Icon::from_resource(32512, None)?, Some(tray_menu))
         .with_tooltip("DisplayPeek")
@@ -66,7 +71,6 @@ fn main() -> anyhow::Result<()> {
     let quad_renderer = QuadRenderer::new(&d3d)?;
 
     let mut dupl: Option<DesktopDuplicationApi> = None;
-
 
     let sampler = unsafe {
         let mut sampler = std::mem::zeroed();
@@ -91,10 +95,6 @@ fn main() -> anyhow::Result<()> {
 
     let blend_state_masked_1 = make_blend_state(&d3d.device, D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_INV_SRC_ALPHA)?;
     let blend_state_masked_2 = make_blend_state(&d3d.device, D3D11_BLEND_INV_DEST_COLOR, D3D11_BLEND_INV_SRC_COLOR)?;
-
-    let mut fps = fps_counter::FPSCounter::new();
-
-    let enabled_displays = &["\\\\.\\DISPLAY1"];
 
     event_loop.run_return(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -176,7 +176,6 @@ fn main() -> anyhow::Result<()> {
                             }
 
                             d3d.swap_chain.Present(1, 0).unwrap();
-                            window.set_title(&format!("{} fps", fps.tick()))
                         }
                     }
                 }
@@ -186,17 +185,19 @@ fn main() -> anyhow::Result<()> {
 
                 match adapter.iter_displays().find(|d|d.hmonitor().unwrap() == monitor) {
                     None => log::warn!("Cannot find the correct display"),
-                    Some(display) => {
-                        if enabled_displays.contains(&display.name().unwrap().as_str()) {
-                            let dupl = dupl.insert(DesktopDuplicationApi::new_with(d3d.device.clone(), d3d.context.clone(), display).unwrap());//.switch_output(display).unwrap();
-                            vsync_switcher.change_display(dupl.get_current_output().clone());
-                            window.set_visible(true);
-                        } else {
+                    Some(display) => match config.get_overlay_config(&display.name().unwrap()) {
+                        None => {
                             dupl = None;
                             vsync_switcher.change_display(None);
                             window.set_visible(false);
                         }
-
+                        Some(overlay_config) => {
+                            let dupl = dupl.insert(DesktopDuplicationApi::new_with(d3d.device.clone(), d3d.context.clone(), display).unwrap());//.switch_output(display).unwrap();
+                            vsync_switcher.change_display(dupl.get_current_output().clone());
+                            window.set_outer_position(overlay_config.position);
+                            window.set_inner_size(overlay_config.size);
+                            window.set_visible(true);
+                        }
                     }
                 }
 
@@ -218,6 +219,9 @@ fn main() -> anyhow::Result<()> {
             Event::MenuEvent { menu_id, origin: MenuType::ContextMenu, .. } => {
                 if menu_id == quit_item.clone().id() {
                     *control_flow = ControlFlow::Exit;
+                }
+                if menu_id == config_item.clone().id() {
+                    config = Config::load();
                 }
             }
             Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
