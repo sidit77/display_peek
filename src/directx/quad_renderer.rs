@@ -1,5 +1,5 @@
 use std::mem::size_of;
-use windows::Win32::Graphics::Direct3D11::{D3D11_APPEND_ALIGNED_ELEMENT, D3D11_BIND_CONSTANT_BUFFER, D3D11_BIND_INDEX_BUFFER, D3D11_BIND_VERTEX_BUFFER, D3D11_BUFFER_DESC, D3D11_INPUT_ELEMENT_DESC, D3D11_INPUT_PER_VERTEX_DATA, D3D11_SUBRESOURCE_DATA, D3D11_USAGE_DEFAULT, ID3D11Buffer, ID3D11InputLayout, ID3D11PixelShader, ID3D11SamplerState, ID3D11ShaderResourceView, ID3D11VertexShader};
+use windows::Win32::Graphics::Direct3D11::{D3D11_APPEND_ALIGNED_ELEMENT, D3D11_BIND_CONSTANT_BUFFER, D3D11_BIND_INDEX_BUFFER, D3D11_BIND_VERTEX_BUFFER, D3D11_BUFFER_DESC, D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_INPUT_ELEMENT_DESC, D3D11_INPUT_PER_VERTEX_DATA, D3D11_SAMPLER_DESC, D3D11_SUBRESOURCE_DATA, D3D11_TEXTURE_ADDRESS_CLAMP, D3D11_USAGE_DEFAULT, ID3D11Buffer, ID3D11InputLayout, ID3D11PixelShader, ID3D11SamplerState, ID3D11ShaderResourceView, ID3D11VertexShader};
 use anyhow::Result;
 use glam::Mat4;
 use windows::Win32::Graphics::Direct3D::D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
@@ -33,6 +33,7 @@ pub struct QuadRenderer {
     vertex_shader: ID3D11VertexShader,
     pixel_shader: ID3D11PixelShader,
     input_layout: ID3D11InputLayout,
+    sampler: ID3D11SamplerState,
     constant_buffer: ID3D11Buffer
 }
 
@@ -129,12 +130,29 @@ impl QuadRenderer {
             buffer.unwrap()
         };
 
+        let sampler = unsafe {
+            let mut sampler = std::mem::zeroed();
+            d3d.device.CreateSamplerState(&D3D11_SAMPLER_DESC {
+                Filter: D3D11_FILTER_MIN_MAG_MIP_LINEAR,
+                AddressU: D3D11_TEXTURE_ADDRESS_CLAMP,
+                AddressV: D3D11_TEXTURE_ADDRESS_CLAMP,
+                AddressW: D3D11_TEXTURE_ADDRESS_CLAMP,
+                MinLOD: f32::MIN,
+                MaxLOD: f32::MAX,
+                MaxAnisotropy: 1,
+                MipLODBias: 0.0,
+                ..Default::default()
+            }, Some(&mut sampler))?;
+            sampler.unwrap()
+        };
+
         Ok(Self {
             vertex_buffer,
             index_buffer,
             vertex_shader: vs,
             pixel_shader: ps,
             input_layout,
+            sampler,
             constant_buffer,
         })
     }
@@ -154,15 +172,15 @@ impl QuadRenderer {
             d3d.context.VSSetShader(&self.vertex_shader, None);
             d3d.context.VSSetConstantBuffers(0, Some(&[self.constant_buffer.clone()]));
             d3d.context.PSSetShader(&self.pixel_shader, None);
+            d3d.context.PSSetSamplers(0, Some(&[self.sampler.clone()]));
         }
     }
 
-    pub fn draw(&self, d3d: &Direct3D, transform: Mat4, sampler: &ID3D11SamplerState, texture: &ID3D11ShaderResourceView) {
+    pub fn draw(&self, d3d: &Direct3D, transform: Mat4, texture: &ID3D11ShaderResourceView) {
         unsafe {
             let transposed = transform.transpose();
             let ptr = transposed.as_ref().as_ptr() as _;
             d3d.context.UpdateSubresource(&self.constant_buffer, 0, None, ptr, 0, 0);
-            d3d.context.PSSetSamplers(0, Some(&[sampler.clone()]));
             d3d.context.PSSetShaderResources(0, Some(&[texture.clone()]));
             d3d.context.DrawIndexed(INDICES.len() as _, 0, 0);
         }

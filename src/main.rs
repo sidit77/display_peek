@@ -12,17 +12,17 @@ use std::time::{Duration, Instant};
 use glam::{Mat4, Quat, vec3};
 use log::LevelFilter;
 use windows::Win32::Graphics::Gdi::HMONITOR;
-use tao::{dpi::*, event::*, event_loop::*, window::*};
+use tao::{event::*, event_loop::*, window::*};
 use tao::menu::{MenuItemAttributes, MenuType};
 use tao::menu::ContextMenu;
 use tao::platform::run_return::EventLoopExtRunReturn;
 use tao::platform::windows::{IconExtWindows, WindowBuilderExtWindows};
 use tao::system_tray::SystemTrayBuilder;
-use windows::Win32::Graphics::Direct3D11::{D3D11_BLEND_INV_DEST_COLOR, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_INV_SRC_COLOR, D3D11_BLEND_ONE, D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_SRC_COLOR, D3D11_BLEND_ZERO, D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_SAMPLER_DESC, D3D11_TEXTURE_ADDRESS_CLAMP, D3D11_VIEWPORT};
+use windows::Win32::Graphics::Direct3D11::{D3D11_BLEND_INV_DEST_COLOR, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_INV_SRC_COLOR, D3D11_BLEND_ONE, D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_SRC_COLOR, D3D11_BLEND_ZERO, D3D11_VIEWPORT};
 use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx};
 use windows::Win32::UI::HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext};
 use crate::config::Config;
-use crate::directx::{AdapterFactory, CursorType, DesktopDuplicationApi, Direct3D, QuadRenderer};
+use crate::directx::{AdapterFactory, CursorSprite, CursorType, DesktopDuplication, Direct3D, QuadRenderer};
 use crate::utils::make_blend_state;
 
 #[derive(Debug, Clone, Copy)]
@@ -52,8 +52,6 @@ fn main() -> anyhow::Result<()> {
         .with_visible(false)
         .with_title("DisplayPeek")
         .with_drag_and_drop(false)
-        .with_inner_size(LogicalSize::new(1280, 720))
-        .with_position(LogicalPosition::new(-1600, 150))
         .with_decorations(false)
         .with_always_on_top(true)
         .with_skip_taskbar(true)
@@ -75,23 +73,8 @@ fn main() -> anyhow::Result<()> {
     let mut d3d = Direct3D::new(&adapter, &window)?;
     let quad_renderer = QuadRenderer::new(&d3d)?;
 
-    let mut dupl: Option<DesktopDuplicationApi> = None;
-
-    let sampler = unsafe {
-        let mut sampler = std::mem::zeroed();
-        d3d.device.CreateSamplerState(&D3D11_SAMPLER_DESC {
-            Filter: D3D11_FILTER_MIN_MAG_MIP_LINEAR,
-            AddressU: D3D11_TEXTURE_ADDRESS_CLAMP,
-            AddressV: D3D11_TEXTURE_ADDRESS_CLAMP,
-            AddressW: D3D11_TEXTURE_ADDRESS_CLAMP,
-            MinLOD: f32::MIN,
-            MaxLOD: f32::MAX,
-            MaxAnisotropy: 1,
-            MipLODBias: 0.0,
-            ..Default::default()
-        }, Some(&mut sampler))?;
-        sampler.unwrap()
-    };
+    let mut dupl: Option<DesktopDuplication> = None;
+    let mut cursor_sprite = CursorSprite::new(&d3d.device, 32, 32);
 
     let blend_state_color = make_blend_state(&d3d.device, D3D11_BLEND_ONE, D3D11_BLEND_INV_SRC_ALPHA)?;
 
@@ -158,30 +141,30 @@ fn main() -> anyhow::Result<()> {
 
                             let transform = screenspace * dupl.get_display_mode().get_frame_transform();
                             d3d.context.OMSetBlendState(None, None, u32::MAX);
-                            quad_renderer.draw(&d3d, transform, &sampler, &tex_view);
+                            quad_renderer.draw(&d3d, transform, &tex_view);
 
-                            if let Some((pt, cursor)) = dupl.get_cursor() {
+                            if let (Some(pt), true) = (dupl.get_cursor_pos(), cursor_sprite.valid) {
                                 let transform = screenspace * Mat4::from_scale_rotation_translation(
-                                    vec3(cursor.width as f32, cursor.height as f32, 0.0),
+                                    vec3(cursor_sprite.width as f32, cursor_sprite.height as f32, 0.0),
                                     Quat::IDENTITY,
                                     vec3(pt.x as f32, pt.y as f32, 0.0)
                                 );
-                                match cursor.cursor_type {
+                                match cursor_sprite.cursor_type {
                                     CursorType::Color => {
                                         d3d.context.OMSetBlendState(&blend_state_color, None, u32::MAX);
-                                        quad_renderer.draw(&d3d, transform, &sampler, cursor.norm_srv());
+                                        quad_renderer.draw(&d3d, transform, cursor_sprite.norm_srv());
                                     }
                                     CursorType::Monochrome => {
                                         d3d.context.OMSetBlendState(&blend_state_monochrome_1, None, u32::MAX);
-                                        quad_renderer.draw(&d3d, transform, &sampler, cursor.norm_srv());
+                                        quad_renderer.draw(&d3d, transform, cursor_sprite.norm_srv());
                                         d3d.context.OMSetBlendState(&blend_state_monochrome_2, None, u32::MAX);
-                                        quad_renderer.draw(&d3d, transform, &sampler, cursor.mask_srv());
+                                        quad_renderer.draw(&d3d, transform, cursor_sprite.mask_srv());
                                     }
                                     CursorType::MaskedColor => {
                                         d3d.context.OMSetBlendState(&blend_state_masked_1, None, u32::MAX);
-                                        quad_renderer.draw(&d3d, transform, &sampler, cursor.norm_srv());
+                                        quad_renderer.draw(&d3d, transform, cursor_sprite.norm_srv());
                                         d3d.context.OMSetBlendState(&blend_state_masked_2, None, u32::MAX);
-                                        quad_renderer.draw(&d3d, transform, &sampler, cursor.mask_srv());
+                                        quad_renderer.draw(&d3d, transform, cursor_sprite.mask_srv());
                                     }
                                 }
 
@@ -205,7 +188,7 @@ fn main() -> anyhow::Result<()> {
                             let equals = dupl.as_ref().map(|d| d.get_current_output() == &display);
                             if !equals.unwrap_or(false) {
                                 dupl.take();
-                                let new_dupl = DesktopDuplicationApi::new_with(d3d.device.clone(), d3d.context.clone(), display).unwrap();//.switch_output(display).unwrap();
+                                let new_dupl = DesktopDuplication::new(&d3d.device, display).unwrap();
                                 vsync_switcher.change_display(new_dupl.get_current_output().clone());
                                 dupl = Some(new_dupl);
                             }
@@ -215,14 +198,18 @@ fn main() -> anyhow::Result<()> {
                         }
                     }
                 }
-
-                //log::info!("Cursor event: {:?}", monitor);
             },
             Event::UserEvent(CustomEvent::VBlank) => {
                 if let Some(dupl) = dupl.as_mut() {
                     match dupl.try_acquire_next_frame() {
-                        Ok(true) => window.request_redraw(),
-                        Ok(false) => {},
+                        Ok(result) => {
+                            if result.success {
+                                window.request_redraw()
+                            }
+                            if result.cursor_updated {
+                                cursor_sprite.update(&d3d.device, &d3d.context, dupl.get_cursor_data().unwrap());
+                            }
+                        },
                         Err(err) => log::error!("error aquiring frame: {}", err)
                     }
                 }
