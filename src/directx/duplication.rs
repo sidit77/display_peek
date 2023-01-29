@@ -26,7 +26,7 @@ pub struct DesktopDuplication {
 
 impl DesktopDuplication {
     pub fn new(d3d_device: &ID3D11Device, output: Display) -> Result<Self> {
-        let dupl = Self::create_dupl_output(&d3d_device, &output)?;
+        let dupl = Self::create_dupl_output(d3d_device, &output)?;
         let display_mode = output.get_current_display_mode()?;
         Ok(Self {
             d3d_device: d3d_device.clone(),

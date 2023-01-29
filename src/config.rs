@@ -57,11 +57,13 @@ impl Config {
         Ok(ConfigWatcher(watcher))
     }
 
-    pub fn load() -> Config {
-
-
-        let config: Config = toml::from_str(&std::fs::read_to_string(Self::path()).unwrap()).unwrap();
-        config
+    pub fn load() -> Result<Config> {
+        if !Self::path().exists(){
+            log::info!("Writing default config");
+            std::fs::write(Self::path(), include_bytes!("../resources/default_config.toml"))?;
+        }
+        let config: Config = toml::from_str(&std::fs::read_to_string(Self::path())?)?;
+        Ok(config)
     }
 
     pub fn get_overlay_config(&self, monitor_name: &str) -> Option<OverlayConfig> {
@@ -77,12 +79,10 @@ impl OverlayConfig {
     pub fn with_override(self, overlay_override: Option<OverlayOverride>) -> Self {
         Self {
             position: overlay_override
-                .map(|x|x.position)
-                .flatten()
+                .and_then(|x|x.position)
                 .unwrap_or(self.position),
             size: overlay_override
-                .map(|x|x.size)
-                .flatten()
+                .and_then(|x|x.size)
                 .unwrap_or(self.size),
         }
     }

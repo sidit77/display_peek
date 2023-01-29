@@ -43,7 +43,7 @@ fn main() -> anyhow::Result<()> {
     unsafe { SetProcessDpiAwarenessContext(Some(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)); }
     unsafe { CoInitializeEx(Some(null()), COINIT_MULTITHREADED)?; }
 
-    let mut config = Config::load();
+    let mut config = Config::load()?;
 
     let adapter = AdapterFactory::new().get_adapter_by_idx(0).unwrap();
 
@@ -210,7 +210,7 @@ fn main() -> anyhow::Result<()> {
                                 cursor_sprite.update(&d3d.device, &d3d.context, dupl.get_cursor_data().unwrap());
                             }
                         },
-                        Err(err) => log::error!("error aquiring frame: {}", err)
+                        Err(err) => log::error!("error acquiring frame: {}", err)
                     }
                 }
             },
@@ -223,9 +223,16 @@ fn main() -> anyhow::Result<()> {
                 if let Some(timer) = reload_timer {
                     if timer.checked_duration_since(Instant::now()).is_none() {
                         log::debug!("Reloading config");
-                        config = Config::load();
                         reload_timer = None;
-                        reload_state();
+                        match Config::load() {
+                            Ok(new_config) => {
+                                config = new_config;
+                                reload_state();
+                            },
+                            Err(err) => {
+                                log::error!("Error loading config: {}", err);
+                            }
+                        }
                     }
                 }
             }
