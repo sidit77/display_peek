@@ -5,6 +5,7 @@ mod vsync_helper;
 mod utils;
 mod directx;
 mod config;
+mod tray_helper;
 
 use std::ops::Add;
 use std::ptr::null;
@@ -14,23 +15,22 @@ use glam::{Mat4, Quat, vec3};
 use log::LevelFilter;
 use windows::Win32::Graphics::Gdi::HMONITOR;
 use tao::{event::*, event_loop::*, window::*};
-use tao::menu::{MenuItemAttributes, MenuType};
-use tao::menu::ContextMenu;
 use tao::platform::run_return::EventLoopExtRunReturn;
-use tao::platform::windows::{IconExtWindows, WindowBuilderExtWindows};
-use tao::system_tray::SystemTrayBuilder;
+use tao::platform::windows::WindowBuilderExtWindows;
 use windows::Win32::Graphics::Direct3D11::{D3D11_BLEND_INV_DEST_COLOR, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_INV_SRC_COLOR, D3D11_BLEND_ONE, D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_SRC_COLOR, D3D11_BLEND_ZERO, D3D11_VIEWPORT};
 use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx};
 use windows::Win32::UI::HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext};
 use crate::config::Config;
 use crate::directx::{AdapterFactory, CursorSprite, CursorType, DesktopDuplication, Direct3D, QuadRenderer};
+use crate::tray_helper::create_system_tray;
 use crate::utils::{LogResultExt, make_blend_state, make_shader_resource_view, show_message_box};
 
 #[derive(Debug, Clone, Copy)]
 pub enum CustomEvent {
     CursorMonitorSwitch(HMONITOR),
     VBlank,
-    ConfigChange
+    ConfigChange,
+    QuitButton
 }
 
 fn main() -> anyhow::Result<()> {
@@ -77,16 +77,6 @@ fn run() -> anyhow::Result<()> {
     let vsync_switcher = vsync_helper::start_vsync_thread(&event_loop, None);
     let _config_watcher = Config::create_watcher(&event_loop)?;
 
-
-    let mut tray_menu = ContextMenu::new();
-    let _version_item = tray_menu.add_item(MenuItemAttributes::new(concat!("Display Peek (version ", env!("CARGO_PKG_VERSION"), ")"))
-        .with_enabled(false));
-    let config_item = tray_menu.add_item(MenuItemAttributes::new("Open Config"));
-    let quit_item = tray_menu.add_item(MenuItemAttributes::new("Quit"));
-    let _tray = SystemTrayBuilder::new(Icon::from_resource(32512, None)?, Some(tray_menu))
-        .with_tooltip("Display Peek")
-        .build(&event_loop)?;
-
     let mut d3d = Direct3D::new(&adapter, &window)?;
     let quad_renderer = QuadRenderer::new(&d3d)?;
 
@@ -110,6 +100,8 @@ fn run() -> anyhow::Result<()> {
         }
     };
     reload_state();
+
+    let system_tray = create_system_tray(&event_loop)?;
 
     let mut reload_timer: Option<Instant> = None;
 
@@ -244,6 +236,9 @@ fn run() -> anyhow::Result<()> {
                     }
                 }
             },
+            Event::UserEvent(CustomEvent::QuitButton) => {
+                *control_flow = ControlFlow::Exit;
+            }
             Event::UserEvent(CustomEvent::ConfigChange) => {
                 log::trace!("Config modified");
                 let timer = reload_timer.insert(Instant::now().add(Duration::from_secs_f32(0.25)));
@@ -270,22 +265,12 @@ fn run() -> anyhow::Result<()> {
                d3d.resize(size.width, size.height)
                    .log_ok("Can not resize resources");
             }
-            Event::MenuEvent { menu_id, origin: MenuType::ContextMenu, .. } => {
-                if menu_id == quit_item.clone().id() {
-                    *control_flow = ControlFlow::Exit;
-                }
-                if menu_id == config_item.clone().id() {
-                    if let Err(err) = open::that(Config::path()) {
-                        log::warn!("Can not open editor: {}", err);
-                        show_message_box("Error", format!("Can not open editor\n{}", err));
-                    }
-                }
-            }
             Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
                 *control_flow = ControlFlow::Exit;
             }
             _ => {}
         }
     });
+    system_tray.wait_for_end();
     Ok(())
 }
