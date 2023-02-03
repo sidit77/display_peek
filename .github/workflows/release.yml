@@ -30,17 +30,9 @@ jobs:
           command: build
           args: --release --locked --target=x86_64-pc-windows-msvc --color=always --verbose
           use-cross: false
-
-      - name: Package
-        run: >
-          7z a display_peek.zip
-          License.md Readme.md
-          ./target/x86_64-pc-windows-msvc/release/display_peek.exe
+          
       - name: Create release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v1
         with:
-          draft: true
           files: |
-            *.zip
-            *.tar.gz
+            ./target/x86_64-pc-windows-msvc/release/display_peek.exe
