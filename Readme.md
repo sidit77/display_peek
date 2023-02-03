@@ -21,7 +21,7 @@ cargo build --release
 ```
 
 ## Configuration
-This app is configured using its config file. Simple right click the tray icon and click `Open Config`. The app will automatically reload the config everytime you save.
+This app is configured using its config file. Simply right click the tray icon and click `Open Config`. The app will automatically reload the config everytime you save.
 
 ## Known Bugs
 Some apps seem to block the cursor tracking as long as they are focused.
