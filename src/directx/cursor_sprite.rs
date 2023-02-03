@@ -69,13 +69,13 @@ impl CursorSprite {
             },
             CursorType::Color => {
                 assert_eq!((self.height * self.width) as usize * size_of::<u32>(), data.len());
-                self.update_textures(context, Some(data.as_ptr() as _), None)
+                let buffer: Vec<u32> = bgra_to_rgba(data)
+                    .collect();
+                self.update_textures(context, Some(buffer.as_ptr() as _), None)
             },
             CursorType::MaskedColor => {
                 assert_eq!((self.height * self.width) as usize * size_of::<u32>(), data.len());
-                let (color_buffer, xor_buffer): (Vec<u32>, Vec<u32>) = data
-                    .chunks_exact(4)
-                    .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
+                let (color_buffer, xor_buffer): (Vec<u32>, Vec<u32>) = bgra_to_rgba(data)
                     .map(|c| match (c & 0xFF000000) != 0 {
                         true => (c & 0x00FFFFFF, c & 0x00FFFFFF),
                         false => (c | 0xFF000000, 0xFF000000)
@@ -112,6 +112,12 @@ impl CursorSprite {
         }
     }
 
+}
+
+fn bgra_to_rgba(bytes: &[u8]) -> impl Iterator<Item=u32> + '_ {
+    bytes
+        .chunks_exact(size_of::<u32>())
+        .map(|b| u32::from_le_bytes([b[2], b[1], b[0], b[3]]))
 }
 
 fn make_texture(device: &ID3D11Device, width: u32, height: u32) -> Result<(ID3D11Texture2D, ID3D11ShaderResourceView)> {
