@@ -38,22 +38,19 @@ pub fn create_system_tray(event_loop: &EventLoop<CustomEvent>) -> Result<TrayHan
             .expect("Can not build system tray");
         tray_loop.run_return(move |event, _, control_flow| {
             *control_flow = ControlFlow::Wait;
-            match event {
-                Event::MenuEvent { menu_id, .. } => {
-                    if menu_id == quit_item.clone().id() {
-                        if proxy.send_event(CustomEvent::QuitButton).is_err() {
-                            log::warn!("Main event loop seems to be gone");
-                        }
-                        *control_flow = ControlFlow::Exit;
+            if let Event::MenuEvent { menu_id, .. } = event {
+                if menu_id == quit_item.clone().id() {
+                    if proxy.send_event(CustomEvent::QuitButton).is_err() {
+                        log::warn!("Main event loop seems to be gone");
                     }
-                    if menu_id == config_item.clone().id() {
-                        if let Err(err) = open::that(Config::path()) {
-                            log::warn!("Can not open editor: {}", err);
-                            show_message_box("Error", format!("Can not open editor\n{}", err));
-                        }
+                    *control_flow = ControlFlow::Exit;
+                }
+                if menu_id == config_item.clone().id() {
+                    if let Err(err) = open::that(Config::path()) {
+                        log::warn!("Can not open editor: {}", err);
+                        show_message_box("Error", format!("Can not open editor\n{}", err));
                     }
-                },
-                _ => {}
+                }
             }
         });
         log::trace!("Quiting tray loop");
