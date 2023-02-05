@@ -73,7 +73,7 @@ fn run() -> anyhow::Result<()> {
         .with_undecorated_shadow(true)
         .build(&event_loop)?;
     window.set_ignore_cursor_events(true)?;
-    let _tracker = cursor_tracker::set_hook(&event_loop)?;
+    let tracker = cursor_tracker::set_hook(&event_loop)?;
     let vsync_switcher = vsync_helper::start_vsync_thread(&event_loop, None);
     let _config_watcher = Config::create_watcher(&event_loop)?;
 
@@ -262,15 +262,17 @@ fn run() -> anyhow::Result<()> {
                 }
             }
             Event::WindowEvent { event: WindowEvent::Resized(size), .. } => {
-               d3d.resize(size.width, size.height)
+                d3d.resize(size.width, size.height)
                    .log_ok("Can not resize resources");
+                log::trace!("Resized dx resources to {}/{}", size.width, size.height);
             }
-            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
-                *control_flow = ControlFlow::Exit;
+            Event::LoopDestroyed => {
+                window.set_visible(false);
             }
             _ => {}
         }
     });
+    drop(tracker);
     system_tray.wait_for_end();
     Ok(())
 }
