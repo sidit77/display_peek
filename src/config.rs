@@ -6,6 +6,7 @@ use tao::dpi::{LogicalPosition, LogicalSize};
 use tao::event_loop::EventLoop;
 use anyhow::Result;
 use crate::CustomEvent;
+use crate::utils::LogResultExt;
 
 #[derive(Debug, Clone, Copy, Deserialize)]
 pub struct OverlayConfig {
@@ -47,8 +48,9 @@ impl Config {
         let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
             match res {
                 Ok(event) => {
-                    if event.kind.is_modify() && proxy.send_event(CustomEvent::ConfigChange).is_err() {
-                        log::warn!("Cannot send config change event to eventloop");
+                    if event.kind.is_modify() {
+                        proxy.send_event(CustomEvent::ConfigChange)
+                            .log_ok("Cannot send config change event to eventloop");
                     }
                 },
                 Err(e) => log::warn!("watch error: {:?}", e),

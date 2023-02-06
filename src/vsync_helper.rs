@@ -2,15 +2,15 @@ use std::sync::mpsc::{Sender, TryRecvError};
 use tao::event_loop::EventLoop;
 use crate::CustomEvent;
 use crate::directx::Display;
+use crate::utils::LogResultExt;
 
 #[derive(Debug, Clone)]
 pub struct VSyncThreadHandle(Sender<Option<Display>>);
 
 impl VSyncThreadHandle {
     pub fn change_display(&self, display: impl Into<Option<Display>>) {
-        if self.0.send(display.into()).is_err() {
-            log::warn!("Cannot set display for vsync thread");
-        }
+        self.0.send(display.into())
+            .log_ok("Cannot set display for vsync thread");
     }
 }
 

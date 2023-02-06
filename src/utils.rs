@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use windows::core::{HSTRING, InParam};
 use anyhow::{Context, Result};
 use windows::Win32::Foundation::{FALSE, TRUE};
@@ -103,7 +104,7 @@ pub trait LogResultExt<T> {
     fn log_ok(self, msg: &str) -> Option<T>;
 }
 
-impl<T> LogResultExt<T> for Result<T> {
+impl<T, E: Display> LogResultExt<T> for std::result::Result<T, E> {
     fn log_ok(self, msg: &str) -> Option<T> {
         match self {
             Ok(val) => Some(val),

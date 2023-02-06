@@ -323,7 +323,7 @@ checksum = "bd0c93bb4b0c6d9b77f4435b0ae98c24d17f1c45b2ff844c6151a07256ca923b"
 
 [[package]]
 name = "display_peek"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "directories-next",
@@ -338,6 +338,7 @@ dependencies = [
  "toml 0.7.0",
  "windows 0.44.0",
  "windows-sys 0.45.0",
+ "winreg",
 ]
 
 [[package]]
@@ -1832,6 +1833,15 @@ name = "windows_x86_64_msvc"
 version = "0.42.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "447660ad36a13288b1db4d4248e857b510e8c3a225c822ba4fb748c0aafecffd"
+
+[[package]]
+name = "winreg"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "80d0f4e272c85def139476380b12f9ac60926689dd2e01d4923222f40580869d"
+dependencies = [
+ "winapi",
+]
 
 [[package]]
 name = "x11"
