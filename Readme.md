@@ -23,8 +23,8 @@ cargo build --release
 ## Configuration
 This app is configured using its config file. Simply right click the tray icon and click `Open Config`. The app will automatically reload the config everytime you save.
 
-## Known Bugs
-Some apps seem to block the cursor tracking as long as they are focused.
+## Limitations
+Apps running as administator can block to cursor tracking als long as they are focused unless this app is also running as administrator.
 
 ## License
 MIT License
