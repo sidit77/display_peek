@@ -1,4 +1,3 @@
-use std::ffi::OsString;
 use std::thread;
 use std::thread::JoinHandle;
 use tao::event_loop::{ControlFlow, EventLoop};
@@ -8,9 +7,6 @@ use tao::menu::{ContextMenu, MenuItemAttributes};
 use tao::platform::run_return::EventLoopExtRunReturn;
 use tao::platform::windows::{EventLoopExtWindows, IconExtWindows};
 use tao::system_tray::{Icon, SystemTrayBuilder};
-use winreg::enums::HKEY_CURRENT_USER;
-use winreg::RegKey;
-use winreg::types::FromRegValue;
 use crate::config::Config;
 use crate::CustomEvent;
 use crate::utils::{LogResultExt, show_message_box};
@@ -49,7 +45,7 @@ pub fn create_system_tray(event_loop: &EventLoop<CustomEvent>) -> Result<TrayHan
             *control_flow = ControlFlow::Wait;
             match event {
                 Event::TrayEvent { event: TrayEvent::RightClick, ..} => {
-                    auto_start = is_auto_start_enabled()
+                    auto_start = autostart::is_enabled()
                         .log_ok("can not query registry")
                         .unwrap_or(false);
                     auto_start_item.set_selected(auto_start);
@@ -68,10 +64,10 @@ pub fn create_system_tray(event_loop: &EventLoop<CustomEvent>) -> Result<TrayHan
                     }
                     if menu_id == auto_start_item.clone().id() {
                         if auto_start {
-                            disable_auto_start()
+                            autostart::disable()
                                 .log_ok("Can not delete registry key");
                         } else {
-                            enable_auto_start()
+                            autostart::enable()
                                 .log_ok("Can not create registry key");
                         }
                     }
@@ -84,38 +80,56 @@ pub fn create_system_tray(event_loop: &EventLoop<CustomEvent>) -> Result<TrayHan
     Ok(TrayHandle(handle))
 }
 
-fn auto_start_directory() -> Result<RegKey> {
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    let (key, _) = hkcu.create_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Run")?;
-    Ok(key)
-}
+mod autostart {
+    use std::ffi::OsString;
+    use anyhow::Result;
+    use winreg::enums::HKEY_CURRENT_USER;
+    use winreg::RegKey;
+    use winreg::types::FromRegValue;
+    use crate::utils::LogResultExt;
 
-fn is_auto_start_enabled() -> Result<bool> {
-    let exe_dir = std::env::current_exe()?
-        .canonicalize()?
-        .into_os_string();
-    let result = auto_start_directory()?
-        .enum_values()
-        .filter_map(|r| r.log_ok("Problem enumerating registry key"))
-        .any(|(key, value)|
-            key.eq("DisplayPeek") &&
-                OsString::from_reg_value(&value)
-                    .log_ok("Can not decode registry value")
-                    .map(|v| v.eq(&exe_dir))
-                    .unwrap_or(false));
-    Ok(result)
-}
+    fn directory() -> Result<RegKey> {
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let (key, _) = hkcu.create_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Run")?;
+        Ok(key)
+    }
 
-fn enable_auto_start() -> Result<()> {
-    let key = auto_start_directory()?;
-    let exe_dir = std::env::current_exe()?
-        .canonicalize()?;
-    key.set_value("DisplayPeek", &exe_dir.as_os_str())?;
-    Ok(())
-}
+    fn reg_key() -> &'static str  {
+        "DisplayPeek"
+    }
 
-fn disable_auto_start() -> Result<()> {
-    let key = auto_start_directory()?;
-    key.delete_value("DisplayPeek")?;
-    Ok(())
+    fn start_cmd() -> Result<OsString> {
+        let mut cmd = OsString::from("\"");
+        let exe_dir = dunce::canonicalize(std::env::current_exe()?)?;
+        cmd.push(exe_dir);
+        cmd.push("\"");
+        Ok(cmd)
+    }
+
+    pub fn is_enabled() -> Result<bool> {
+        let cmd = start_cmd()?;
+        let result = directory()?
+            .enum_values()
+            .filter_map(|r| r.log_ok("Problem enumerating registry key"))
+            .any(|(key, value)|
+                key.eq(reg_key()) &&
+                    OsString::from_reg_value(&value)
+                        .log_ok("Can not decode registry value")
+                        .map(|v| v.eq(&cmd))
+                        .unwrap_or(false));
+        Ok(result)
+    }
+
+    pub fn enable() -> Result<()> {
+        let key = directory()?;
+        let cmd = start_cmd()?;
+        key.set_value(reg_key(), &cmd)?;
+        Ok(())
+    }
+
+    pub fn disable() -> Result<()> {
+        let key = directory()?;
+        key.delete_value(reg_key())?;
+        Ok(())
+    }
 }

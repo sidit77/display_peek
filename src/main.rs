@@ -8,8 +8,8 @@ mod config;
 mod tray_helper;
 
 use std::ops::Add;
-use std::ptr::null;
 use std::time::{Duration, Instant};
+use std::marker::PhantomData;
 use anyhow::Context;
 use glam::{Mat4, Quat, vec3};
 use log::LevelFilter;
@@ -18,7 +18,7 @@ use tao::{event::*, event_loop::*, window::*};
 use tao::platform::run_return::EventLoopExtRunReturn;
 use tao::platform::windows::WindowBuilderExtWindows;
 use windows::Win32::Graphics::Direct3D11::{D3D11_BLEND_INV_DEST_COLOR, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_INV_SRC_COLOR, D3D11_BLEND_ONE, D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_SRC_COLOR, D3D11_BLEND_ZERO, D3D11_VIEWPORT};
-use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx};
+use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx, CoUninitialize};
 use windows::Win32::UI::HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext};
 use crate::config::Config;
 use crate::directx::{AdapterFactory, CursorSprite, CursorType, DesktopDuplication, Direct3D, QuadRenderer};
@@ -52,9 +52,7 @@ fn main() -> anyhow::Result<()> {
 
 fn run() -> anyhow::Result<()> {
 
-
-    unsafe { SetProcessDpiAwarenessContext(Some(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)); }
-    unsafe { CoInitializeEx(Some(null()), COINIT_MULTITHREADED)?; }
+    com_initialized();
 
     let mut config = Config::load()?;
 
@@ -275,4 +273,35 @@ fn run() -> anyhow::Result<()> {
     drop(tracker);
     system_tray.wait_for_end();
     Ok(())
+}
+
+#[derive(Default)]
+struct ComWrapper {
+    _ptr: PhantomData<*mut ()>,
+}
+
+thread_local!(static COM_INITIALIZED: ComWrapper = {
+    unsafe {
+        SetProcessDpiAwarenessContext(Some(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2));
+        CoInitializeEx(None, COINIT_MULTITHREADED)
+            .expect("Could not initialize COM");
+        let thread = std::thread::current();
+        log::trace!("Initialized COM on thread \"{}\"", thread.name().unwrap_or(""));
+        ComWrapper::default()
+    }
+});
+
+impl Drop for ComWrapper {
+    fn drop(&mut self) {
+        unsafe {
+            CoUninitialize();
+            let thread = std::thread::current();
+            log::trace!("Uninitialized COM on thread \"{}\"", thread.name().unwrap_or(""));
+        }
+    }
+}
+
+#[inline]
+pub fn com_initialized() {
+    COM_INITIALIZED.with(|_| {});
 }
