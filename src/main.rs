@@ -11,11 +11,13 @@ use std::ops::Add;
 use std::time::{Duration, Instant};
 use std::marker::PhantomData;
 use anyhow::Context;
+use error_tools::gui::set_gui_panic_hook;
+use error_tools::log::LogResultExt;
+use error_tools::tao::EventLoopExtRunResult;
 use glam::{Mat4, Quat, vec3};
 use log::LevelFilter;
 use windows::Win32::Graphics::Gdi::HMONITOR;
 use tao::{event::*, event_loop::*, window::*};
-use tao::platform::run_return::EventLoopExtRunReturn;
 use tao::platform::windows::WindowBuilderExtWindows;
 use windows::Win32::Graphics::Direct3D11::{D3D11_BLEND_INV_DEST_COLOR, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_INV_SRC_COLOR, D3D11_BLEND_ONE, D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_SRC_COLOR, D3D11_BLEND_ZERO, D3D11_VIEWPORT};
 use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx, CoUninitialize};
@@ -23,7 +25,7 @@ use windows::Win32::UI::HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetP
 use crate::config::Config;
 use crate::directx::{AdapterFactory, CursorSprite, CursorType, DesktopDuplication, Direct3D, QuadRenderer};
 use crate::tray_helper::create_system_tray;
-use crate::utils::{LogResultExt, make_blend_state, make_shader_resource_view, show_message_box};
+use crate::utils::{make_blend_state, make_shader_resource_view};
 
 #[derive(Debug, Clone, Copy)]
 pub enum CustomEvent {
@@ -34,6 +36,8 @@ pub enum CustomEvent {
 }
 
 fn main() -> anyhow::Result<()> {
+    set_gui_panic_hook();
+
     env_logger::builder()
         .filter_level(LevelFilter::Trace)
         //.filter(Some("desktop_display::directx::duplication"), LevelFilter::Debug)
@@ -41,24 +45,20 @@ fn main() -> anyhow::Result<()> {
         //.format_target(false)
         .init();
 
-    match run() {
-        Ok(()) => Ok(()),
-        Err(err) => {
-            show_message_box("Error", format!("{}", err));
-            Err(err)
+
+    loop {
+        match run().expect("Unexpected Error") {
+            true => log::info!("Restarting the app"),
+            false => break Ok(()),
         }
     }
 }
 
-fn run() -> anyhow::Result<()> {
+fn run() -> anyhow::Result<bool> {
 
     com_initialized();
 
     let mut config = Config::load()?;
-
-    let adapter = AdapterFactory::new()?
-        .get_adapter_by_idx(0)
-        .context("Can not get default graphics adapter")?;
 
     let mut event_loop = EventLoop::with_user_event();
     let window = WindowBuilder::new()
@@ -71,9 +71,14 @@ fn run() -> anyhow::Result<()> {
         .with_undecorated_shadow(true)
         .build(&event_loop)?;
     window.set_ignore_cursor_events(true)?;
+    let system_tray = create_system_tray(&event_loop)?;
     let tracker = cursor_tracker::set_hook(&event_loop)?;
-    let vsync_switcher = vsync_helper::start_vsync_thread(&event_loop, None);
     let _config_watcher = Config::create_watcher(&event_loop)?;
+    let vsync_switcher = vsync_helper::start_vsync_thread(&event_loop, None);
+
+    let adapter = AdapterFactory::new()?
+        .get_adapter_by_idx(0)
+        .context("Can not get default graphics adapter")?;
 
     let mut d3d = Direct3D::new(&adapter, &window)?;
     let quad_renderer = QuadRenderer::new(&d3d)?;
@@ -99,11 +104,9 @@ fn run() -> anyhow::Result<()> {
     };
     reload_state();
 
-    let system_tray = create_system_tray(&event_loop)?;
-
     let mut reload_timer: Option<Instant> = None;
 
-    event_loop.run_return(move |event, _, control_flow| {
+    let result = event_loop.run_result(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
         match event {
             Event::RedrawRequested(_) => {
@@ -180,8 +183,12 @@ fn run() -> anyhow::Result<()> {
 
                             }
                             //TODO only swap dirty rects
-                            d3d.swap_chain.Present(1, 0).ok()
-                                .expect("Swap chain error");
+                            d3d.swap_chain.Present(1, 0)
+                                .ok()
+                                .map_err(|err| {
+                                    log::error!("Swapchain error: {}", err);
+                                    true
+                                })?;
                         }
                     }
                 }
@@ -261,7 +268,7 @@ fn run() -> anyhow::Result<()> {
             }
             Event::WindowEvent { event: WindowEvent::Resized(size), .. } => {
                 d3d.resize(size.width, size.height)
-                   .log_ok("Can not resize resources");
+                    .log_ok("Can not resize resources");
                 log::trace!("Resized dx resources to {}/{}", size.width, size.height);
             }
             Event::LoopDestroyed => {
@@ -269,10 +276,15 @@ fn run() -> anyhow::Result<()> {
             }
             _ => {}
         }
+        Ok(())
     });
+
     drop(tracker);
     system_tray.wait_for_end();
-    Ok(())
+    Ok(match result {
+        Err(true) => true,
+        _ => false
+    })
 }
 
 #[derive(Default)]

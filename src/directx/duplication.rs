@@ -5,9 +5,9 @@ use windows::Win32::Foundation::{POINT, GetLastError};
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R16G16B16A16_FLOAT};
 use windows::Win32::System::StationsAndDesktops::{OpenInputDesktop, SetThreadDesktop, DF_ALLOWOTHERACCOUNTHOOK, DESKTOP_ACCESS_FLAGS};
 use anyhow::{Context, Result};
+use error_tools::SomeOptionExt;
 use windows::Win32::System::SystemServices::GENERIC_READ;
 use crate::directx::{Display, DisplayMode};
-use crate::utils::EnsureOptionExt;
 
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
 pub struct AcquisitionResults {
@@ -53,7 +53,7 @@ impl DesktopDuplication {
         if self.dupl.is_none() {
             self.reacquire_dup()?;
         }
-        let dupl = self.dupl.as_ref().ensure()?;
+        let dupl = self.dupl.as_ref().some()?;
         let mut resource = unsafe {std::mem::zeroed()};
         let status = unsafe { dupl.AcquireNextFrame(0, &mut frame_info, &mut resource) };
         if let Err(e) = status {

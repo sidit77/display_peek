@@ -2,6 +2,7 @@ use std::thread;
 use std::thread::JoinHandle;
 use tao::event_loop::{ControlFlow, EventLoop};
 use anyhow::Result;
+use error_tools::log::LogResultExt;
 use tao::event::{Event, TrayEvent};
 use tao::menu::{ContextMenu, MenuItemAttributes};
 use tao::platform::run_return::EventLoopExtRunReturn;
@@ -9,7 +10,7 @@ use tao::platform::windows::{EventLoopExtWindows, IconExtWindows};
 use tao::system_tray::{Icon, SystemTrayBuilder};
 use crate::config::Config;
 use crate::CustomEvent;
-use crate::utils::{LogResultExt, show_message_box};
+use crate::utils::show_message_box;
 
 pub struct TrayHandle(JoinHandle<()>);
 
@@ -83,10 +84,10 @@ pub fn create_system_tray(event_loop: &EventLoop<CustomEvent>) -> Result<TrayHan
 mod autostart {
     use std::ffi::OsString;
     use anyhow::Result;
+    use error_tools::log::LogResultExt;
     use winreg::enums::HKEY_CURRENT_USER;
     use winreg::RegKey;
     use winreg::types::FromRegValue;
-    use crate::utils::LogResultExt;
 
     fn directory() -> Result<RegKey> {
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);

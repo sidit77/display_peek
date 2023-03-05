@@ -5,8 +5,8 @@ use serde::Deserialize;
 use tao::dpi::{LogicalPosition, LogicalSize};
 use tao::event_loop::EventLoop;
 use anyhow::Result;
+use error_tools::log::LogResultExt;
 use crate::CustomEvent;
-use crate::utils::LogResultExt;
 
 #[derive(Debug, Clone, Copy, Deserialize)]
 pub struct OverlayConfig {

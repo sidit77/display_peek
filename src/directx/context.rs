@@ -1,5 +1,6 @@
 use windows::Win32::Graphics::Direct3D11::{D3D11_CREATE_DEVICE_FLAG, D3D11_SDK_VERSION, D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext4, ID3D11RenderTargetView, ID3D11Texture2D};
 use anyhow::Result;
+use error_tools::SomeOptionExt;
 use tao::platform::windows::WindowExtWindows;
 use tao::window::Window;
 use windows::core::Interface;
@@ -8,7 +9,6 @@ use windows::Win32::Graphics::Direct3D::{D3D_DRIVER_TYPE_UNKNOWN, D3D_FEATURE_LE
 use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, DXGI_SCALING_NONE, DXGI_SWAP_CHAIN_DESC1, DXGI_SWAP_EFFECT_FLIP_DISCARD, DXGI_USAGE_RENDER_TARGET_OUTPUT, IDXGIFactory2, IDXGISwapChain1};
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_UNKNOWN, DXGI_SAMPLE_DESC};
 use crate::directx::Adapter;
-use crate::utils::EnsureOptionExt;
 
 pub struct Direct3D {
     pub device: ID3D11Device,
@@ -35,8 +35,8 @@ impl Direct3D {
                 Some(&mut d3d_ctx),
             )?;
         }
-        let d3d_device = d3d_device.ensure()?;
-        let d3d_ctx = d3d_ctx.ensure()?.cast::<ID3D11DeviceContext4>()?;
+        let d3d_device = d3d_device.some()?;
+        let d3d_ctx = d3d_ctx.some()?.cast::<ID3D11DeviceContext4>()?;
 
         let dxgi_factory = unsafe { CreateDXGIFactory1::<IDXGIFactory2>()? };
         let window_size = window.inner_size();
@@ -67,7 +67,7 @@ impl Direct3D {
             let buffer = swap_chain.GetBuffer::<ID3D11Texture2D>(0)?;
             let mut target = std::mem::zeroed();
             d3d_device.CreateRenderTargetView(&buffer, None, Some(&mut target))?;
-            target.ensure()?
+            target.some()?
         };
 
         Ok(Self {

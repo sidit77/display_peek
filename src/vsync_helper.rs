@@ -1,8 +1,8 @@
 use std::sync::mpsc::{Sender, TryRecvError};
 use tao::event_loop::EventLoop;
+use error_tools::log::LogResultExt;
 use crate::CustomEvent;
 use crate::directx::Display;
-use crate::utils::LogResultExt;
 
 #[derive(Debug, Clone)]
 pub struct VSyncThreadHandle(Sender<Option<Display>>);

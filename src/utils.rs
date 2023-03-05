@@ -1,6 +1,6 @@
-use std::fmt::Display;
 use windows::core::{HSTRING, InParam};
-use anyhow::{Context, Result};
+use anyhow::Result;
+use error_tools::SomeOptionExt;
 use windows::Win32::Foundation::{FALSE, TRUE};
 use windows::Win32::Graphics::Direct3D11::{D3D11_BLEND, D3D11_BLEND_DESC, D3D11_BLEND_ONE, D3D11_BLEND_OP_ADD, D3D11_BLEND_ZERO, D3D11_COLOR_WRITE_ENABLE_ALL, D3D11_RENDER_TARGET_BLEND_DESC, ID3D11BlendState, ID3D11Device, ID3D11Resource, ID3D11ShaderResourceView};
 use windows::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW};
@@ -36,7 +36,7 @@ pub fn make_blend_state(device: &ID3D11Device, src: D3D11_BLEND, dst: D3D11_BLEN
             IndependentBlendEnable: FALSE,
             AlphaToCoverageEnable: FALSE
         }, Some(&mut blend_state))?;
-        blend_state.ensure()?
+        blend_state.some()?
     })
 }
 
@@ -44,7 +44,7 @@ pub fn make_shader_resource_view<T: Into<InParam<ID3D11Resource>>>(device: &ID3D
     Ok(unsafe {
         let mut view = std::mem::zeroed();
         device.CreateShaderResourceView(resource, None, Some(&mut view))?;
-        view.ensure()?
+        view.some()?
     })
 }
 
@@ -89,29 +89,3 @@ impl Iterator for U8Iter {
 
 impl ExactSizeIterator for U8Iter {}
 
-pub trait EnsureOptionExt<T> {
-    fn ensure(self) -> Result<T>;
-}
-
-impl<T> EnsureOptionExt<T> for Option<T> {
-    fn ensure(self) -> Result<T> {
-        self.context("Option is None")
-    }
-}
-
-
-pub trait LogResultExt<T> {
-    fn log_ok(self, msg: &str) -> Option<T>;
-}
-
-impl<T, E: Display> LogResultExt<T> for std::result::Result<T, E> {
-    fn log_ok(self, msg: &str) -> Option<T> {
-        match self {
-            Ok(val) => Some(val),
-            Err(err) => {
-                log::warn!("{}: {}", msg, err);
-                None
-            }
-        }
-    }
-}

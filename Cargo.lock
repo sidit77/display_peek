@@ -329,6 +329,7 @@ dependencies = [
  "directories-next",
  "dunce",
  "env_logger",
+ "error-tools",
  "glam",
  "log",
  "notify",
@@ -380,6 +381,16 @@ checksum = "aa68f1b12764fab894d2755d2518754e71b4fd80ecfb822714a1206c2aab39bf"
 dependencies = [
  "cc",
  "libc",
+]
+
+[[package]]
+name = "error-tools"
+version = "0.1.0"
+source = "git+https://github.com/sidit77/error-tools#cfd791847712d77b1350a15066ca5a682b654a1f"
+dependencies = [
+ "log",
+ "tao",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
