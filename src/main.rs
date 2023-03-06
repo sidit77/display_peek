@@ -18,7 +18,7 @@ use glam::{Mat4, Quat, vec3};
 use log::LevelFilter;
 use windows::Win32::Graphics::Gdi::HMONITOR;
 use tao::{event::*, event_loop::*, window::*};
-use tao::platform::windows::WindowBuilderExtWindows;
+use tao::platform::windows::{WindowBuilderExtWindows, WindowExtWindows};
 use windows::Win32::Graphics::Direct3D11::{D3D11_BLEND_INV_DEST_COLOR, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_INV_SRC_COLOR, D3D11_BLEND_ONE, D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_SRC_COLOR, D3D11_BLEND_ZERO, D3D11_VIEWPORT};
 use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx, CoUninitialize};
 use windows::Win32::UI::HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext};
@@ -270,6 +270,7 @@ fn run() -> anyhow::Result<bool> {
                 d3d.resize(size.width, size.height)
                     .log_ok("Can not resize resources");
                 log::trace!("Resized dx resources to {}/{}", size.width, size.height);
+                window.set_undecorated_shadow(true);
             }
             Event::LoopDestroyed => {
                 window.set_visible(false);

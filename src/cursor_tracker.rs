@@ -3,9 +3,9 @@ use std::mem::{size_of, zeroed};
 use std::ops::DerefMut;
 use anyhow::{Context, ensure, Result};
 use tao::event_loop::{EventLoop, EventLoopProxy};
-use windows_sys::Win32::Foundation::{LPARAM, LRESULT, POINT, RECT, TRUE, WPARAM};
-use windows_sys::Win32::Graphics::Gdi::{GetMonitorInfoW, HMONITOR, MONITOR_DEFAULTTONEAREST, MonitorFromPoint, MONITORINFO};
-use windows_sys::Win32::UI::WindowsAndMessaging::{CallNextHookEx, GetCursorPos, HHOOK, MSLLHOOKSTRUCT, SetWindowsHookExW, UnhookWindowsHookEx, WH_MOUSE_LL, WM_MOUSEMOVE};
+use windows::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, POINT, RECT, TRUE, WPARAM};
+use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, HMONITOR, MONITOR_DEFAULTTONEAREST, MonitorFromPoint, MONITORINFO};
+use windows::Win32::UI::WindowsAndMessaging::{CallNextHookEx, GetCursorPos, HHOOK, MSLLHOOKSTRUCT, SetWindowsHookExW, UnhookWindowsHookEx, WH_MOUSE_LL, WM_MOUSEMOVE};
 use windows::Win32::Graphics::Gdi::HMONITOR as WinHMonitor;
 use crate::CustomEvent;
 
@@ -37,8 +37,8 @@ fn get_monitor_info(monitor: HMONITOR) -> Option<MONITORINFO> {
 }
 
 unsafe extern "system" fn ll_mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    if wparam as u32 == WM_MOUSEMOVE {
-        let event = (lparam as *const MSLLHOOKSTRUCT).read();
+    if wparam.0 as u32 == WM_MOUSEMOVE {
+        let event = (lparam.0 as *const MSLLHOOKSTRUCT).read();
         CONTEXT.with(|ctx| {
            if let Some(ctx) = ctx.borrow_mut().deref_mut() {
                 if !contains(ctx.current_monitor_info.rcMonitor, event.pt) {
@@ -47,7 +47,7 @@ unsafe extern "system" fn ll_mouse_proc(code: i32, wparam: WPARAM, lparam: LPARA
                         if let Some(info) = get_monitor_info(monitor) {
                             ctx.current_monitor_info = info;
                             ctx.current_monitor = monitor;
-                            let monitor = WinHMonitor(monitor);
+                            //let monitor = WinHMonitor(monitor);
                             if let Err(e) = ctx.event_loop_proxy.send_event(CustomEvent::CursorMonitorSwitch(monitor)){
                                 log::warn!("Cannot send event: {}", e);
                             }
@@ -57,7 +57,7 @@ unsafe extern "system" fn ll_mouse_proc(code: i32, wparam: WPARAM, lparam: LPARA
            }
         });
     }
-    CallNextHookEx(0, code, wparam, lparam)
+    CallNextHookEx(HHOOK::default(), code, wparam, lparam)
 }
 
 #[must_use]
@@ -83,7 +83,7 @@ fn get_current_monitor_sys() -> Option<HMONITOR> {
 }
 
 pub fn get_current_monitor() -> Option<WinHMonitor> {
-    get_current_monitor_sys().map(WinHMonitor)
+    get_current_monitor_sys()
 }
 
 pub fn set_hook(event_loop: &EventLoop<CustomEvent>) -> Result<CursorTrackerHandle> {
@@ -104,8 +104,7 @@ pub fn set_hook(event_loop: &EventLoop<CustomEvent>) -> Result<CursorTrackerHand
             false
         }
     }), "It seems like there is already a hook in place for this thread");
-    let hook = unsafe { SetWindowsHookExW(WH_MOUSE_LL, Some(ll_mouse_proc), 0, 0) };
-    ensure!(hook != 0, "Failed to set mouse hook");
+    let hook = unsafe { SetWindowsHookExW(WH_MOUSE_LL, Some(ll_mouse_proc), HINSTANCE::default(), 0)? };
 
     Ok(CursorTrackerHandle(hook))
 }

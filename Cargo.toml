@@ -28,14 +28,6 @@ winreg = "0.11"
 dunce = "1.0"
 error-tools = {git = "https://github.com/sidit77/error-tools", features=["log", "tao", "gui"]}
 
-[dependencies.windows-sys]
-version = "0.45"
-features = [
-    "Win32_UI_WindowsAndMessaging",
-    "Win32_Foundation",
-    "Win32_Graphics_Gdi"
-]
-
 [dependencies.windows]
 version = "0.44"
 features = [

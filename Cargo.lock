@@ -339,7 +339,6 @@ dependencies = [
  "tauri-winres",
  "toml 0.7.2",
  "windows",
- "windows-sys 0.45.0",
  "winreg",
 ]
 
