@@ -1,9 +1,9 @@
-use windows::Win32::Graphics::Direct3D11::{ID3D11Device, ID3D11Texture2D};
-use windows::Win32::Graphics::Dxgi::{DXGI_OUTDUPL_POINTER_SHAPE_TYPE, DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MONOCHROME, DXGI_OUTDUPL_POINTER_SHAPE_TYPE_COLOR, DXGI_OUTDUPL_POINTER_SHAPE_TYPE_MASKED_COLOR, DXGI_OUTDUPL_POINTER_SHAPE_INFO, IDXGIOutputDuplication, DXGI_ERROR_ACCESS_LOST, DXGI_ERROR_ACCESS_DENIED, DXGI_ERROR_INVALID_CALL, DXGI_ERROR_WAIT_TIMEOUT};
+use windows::Win32::Graphics::Direct3D11::*;
+use windows::Win32::Graphics::Dxgi::*;
 use windows::core::Interface;
 use windows::Win32::Foundation::{POINT, GetLastError};
-use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R16G16B16A16_FLOAT};
-use windows::Win32::System::StationsAndDesktops::{OpenInputDesktop, SetThreadDesktop, DF_ALLOWOTHERACCOUNTHOOK, DESKTOP_ACCESS_FLAGS};
+use windows::Win32::Graphics::Dxgi::Common::*;
+use windows::Win32::System::StationsAndDesktops::*;
 use anyhow::{Context, Result};
 use error_tools::SomeOptionExt;
 use windows::Win32::System::SystemServices::GENERIC_READ;
@@ -12,7 +12,8 @@ use crate::directx::{Display, DisplayMode};
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
 pub struct AcquisitionResults {
     pub success: bool,
-    pub cursor_updated: bool
+    pub cursor_updated: bool,
+    pub frame_update: bool
 }
 
 pub struct DesktopDuplication {
@@ -54,7 +55,7 @@ impl DesktopDuplication {
             self.reacquire_dup()?;
         }
         let dupl = self.dupl.as_ref().some()?;
-        let mut resource = unsafe {std::mem::zeroed()};
+        let mut resource = None;
         let status = unsafe { dupl.AcquireNextFrame(0, &mut frame_info, &mut resource) };
         if let Err(e) = status {
             return match e.code() {
@@ -73,6 +74,8 @@ impl DesktopDuplication {
             None => return Err(anyhow::anyhow!("Resource is null"))
         }
         result.success = true;
+        result.frame_update = frame_info.AccumulatedFrames != 0 || frame_info.TotalMetadataBufferSize != 0 || frame_info.LastPresentTime != 0;
+
 
         if frame_info.PointerShapeBufferSize != 0 {
             let cursor_data = self.cursor_data.get_or_insert_with(|| CursorData {

@@ -1,9 +1,12 @@
-use windows::core::{HSTRING, InParam};
+use std::marker::PhantomData;
+use windows::core::HSTRING;
 use anyhow::Result;
 use error_tools::SomeOptionExt;
 use windows::Win32::Foundation::{FALSE, TRUE};
 use windows::Win32::Graphics::Direct3D11::*;
 use windows::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW};
+use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx, CoUninitialize};
+use windows::Win32::UI::HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext};
 
 fn find_terminal_idx(content: &[u16]) -> usize {
     for (i, val) in content.iter().enumerate() {
@@ -38,12 +41,6 @@ pub fn make_blend_state(device: &ID3D11Device, src: D3D11_BLEND, dst: D3D11_BLEN
     })
 }
 
-pub fn make_shader_resource_view<T: Into<InParam<ID3D11Resource>>>(device: &ID3D11Device, resource: T) -> Result<ID3D11ShaderResourceView> {
-    make_resource(|ptr| unsafe {
-        device.CreateShaderResourceView(resource, None, ptr)
-    })
-}
-
 pub fn make_resource<T>(func: impl FnOnce(Option<*mut Option<T>>) -> windows::core::Result<()>) -> anyhow::Result<T> {
     let mut obj = None;
     func(Some(&mut obj))?;
@@ -56,6 +53,37 @@ pub fn retrieve<S, T>(self_type: &S, func: unsafe fn(&S, *mut T)) -> T {
         func(self_type, desc.as_mut_ptr());
         desc.assume_init()
     }
+}
+
+#[derive(Default)]
+struct ComWrapper {
+    _ptr: PhantomData<*mut ()>,
+}
+
+thread_local!(static COM_INITIALIZED: ComWrapper = {
+    unsafe {
+        SetProcessDpiAwarenessContext(Some(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2));
+        CoInitializeEx(None, COINIT_MULTITHREADED)
+            .expect("Could not initialize COM");
+        let thread = std::thread::current();
+        log::trace!("Initialized COM on thread \"{}\"", thread.name().unwrap_or(""));
+        ComWrapper::default()
+    }
+});
+
+impl Drop for ComWrapper {
+    fn drop(&mut self) {
+        unsafe {
+            CoUninitialize();
+            let thread = std::thread::current();
+            log::trace!("Uninitialized COM on thread \"{}\"", thread.name().unwrap_or(""));
+        }
+    }
+}
+
+#[inline]
+pub fn com_initialized() {
+    COM_INITIALIZED.with(|_| {});
 }
 
 pub fn show_message_box<T1: Into<HSTRING>, T2: Into<HSTRING>>(title: T1, msg: T2) where {

@@ -9,7 +9,6 @@ mod tray_helper;
 
 use std::ops::Add;
 use std::time::{Duration, Instant};
-use std::marker::PhantomData;
 use anyhow::Context;
 use error_tools::log::LogResultExt;
 use error_tools::tao::EventLoopExtRunResult;
@@ -19,12 +18,11 @@ use windows::Win32::Graphics::Gdi::HMONITOR;
 use tao::{event::*, event_loop::*, window::*};
 use tao::platform::windows::{WindowBuilderExtWindows};
 use windows::Win32::Graphics::Direct3D11::*;
-use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx, CoUninitialize};
-use windows::Win32::UI::HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext};
+use windows::Win32::Graphics::Dxgi::Common::DXGI_SAMPLE_DESC;
 use crate::config::Config;
 use crate::directx::{AdapterFactory, CursorSprite, CursorType, DesktopDuplication, Direct3D, QuadRenderer};
 use crate::tray_helper::create_system_tray;
-use crate::utils::{make_blend_state, make_shader_resource_view};
+use crate::utils::{com_initialized, make_blend_state, make_resource, retrieve};
 
 #[derive(Debug, Clone, Copy)]
 pub enum CustomEvent {
@@ -86,6 +84,7 @@ fn run() -> anyhow::Result<bool> {
 
     let mut dupl: Option<DesktopDuplication> = None;
     let mut cursor_sprite = CursorSprite::new(&d3d.device, 32, 32)?;
+    let mut frame_cache = CachedFrame::new();
 
     let blend_state_color = make_blend_state(&d3d.device, D3D11_BLEND_ONE, D3D11_BLEND_INV_SRC_ALPHA)?;
 
@@ -107,16 +106,16 @@ fn run() -> anyhow::Result<bool> {
 
     let mut reload_timer: Option<Instant> = None;
 
+    let mut last_flow = ControlFlow::Wait;
     let result = event_loop.run_result(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
         match event {
+            Event::MainEventsCleared => if animation_start.is_some() {
+                window.request_redraw()
+            },
             Event::RedrawRequested(_) => {
                 if let Some(dupl) = dupl.as_ref() {
-                    if let Some(tex) = dupl
-                        .get_frame()
-                        .and_then(|tex|
-                            make_shader_resource_view(&d3d.device, tex)
-                                .log_ok("Can not make shader resource view")) {
+                    if let Some( tex) = frame_cache.get_view() {
                         unsafe {
                             let window_size = window.inner_size();
                             let screenspace = Mat4::orthographic_rh(
@@ -127,7 +126,7 @@ fn run() -> anyhow::Result<bool> {
                                 -1.0,
                                 1.0);
 
-                            d3d.context.ClearRenderTargetView(d3d.render_target(), [0.0, 0.0, 0.3, 0.5].as_ptr());
+                            d3d.context.ClearRenderTargetView(d3d.render_target(), [0.0, 0.0, 0.0, 0.0].as_ptr());
 
                             d3d.context.RSSetViewports(Some(&[D3D11_VIEWPORT {
                                 Width: window_size.width as f32,
@@ -147,14 +146,27 @@ fn run() -> anyhow::Result<bool> {
                             let y = 0.5 * (window_size.height as f32 - height);
                             let scale = height / display_height as f32;
 
+                            let animation = match animation_start {
+                                None => 1.0,
+                                Some(start) => {
+                                    let mut elapsed = start.elapsed().as_secs_f32() * 3.0;
+                                    if elapsed >= 1.0 {
+                                        elapsed = 1.0;
+                                        animation_start = None;
+                                    }
+                                    elapsed
+                                }
+                            }.powf(2.0);
                             let screenspace = screenspace * Mat4::from_scale_rotation_translation(
-                                vec3(scale, scale, 0.0),
+                                vec3(scale * animation, scale * animation, 0.0),
                                 Quat::IDENTITY,
-                                vec3(x, y, 0.0)
+                                vec3(
+                                    x + 0.5 * width * (1.0 - animation),
+                                     y + 0.5 * height * (1.0 - animation), 0.0)
                             );
 
                             let transform = screenspace * dupl.get_display_mode().get_frame_transform();
-                            d3d.context.OMSetBlendState(None, None, u32::MAX);
+                            d3d.context.OMSetBlendState(&blend_state_color, None, u32::MAX);
                             quad_renderer.draw(&d3d, transform, &tex);
 
                             if let (Some(pt), true) = (dupl.get_cursor_pos(), cursor_sprite.valid) {
@@ -205,6 +217,7 @@ fn run() -> anyhow::Result<bool> {
                             dupl = None;
                             vsync_switcher.change_display(None);
                             window.set_visible(false);
+                            frame_cache.invalidate();
                         }
                         Some(overlay_config) => {
                             let equals = dupl.as_ref().map(|d| d.get_current_output() == &display);
@@ -218,6 +231,7 @@ fn run() -> anyhow::Result<bool> {
                                     Err(err) => log::error!("Can not create desktop duplication: {}", err)
                                 };
                             }
+                            animation_start = Some(Instant::now());
                             window.set_outer_position(overlay_config.position);
                             window.set_inner_size(overlay_config.size);
                             window.set_visible(true);
@@ -230,6 +244,11 @@ fn run() -> anyhow::Result<bool> {
                     match dupl.try_acquire_next_frame() {
                         Ok(result) => {
                             if result.success {
+                                if result.frame_update {
+                                    if let Some(frame) = dupl.get_frame() {
+                                        frame_cache.update(&d3d.device, &d3d.context, frame);
+                                    }
+                                }
                                 window.request_redraw()
                             }
                             if result.cursor_updated {
@@ -278,6 +297,13 @@ fn run() -> anyhow::Result<bool> {
             }
             _ => {}
         }
+        if animation_start.is_some() && !matches!(*control_flow, ControlFlow::ExitWithCode(_)) {
+            *control_flow = ControlFlow::Poll;
+        }
+        if *control_flow != last_flow {
+            last_flow = *control_flow;
+            log::trace!("switching to {:?}", last_flow);
+        }
         Ok(())
     });
 
@@ -289,33 +315,71 @@ fn run() -> anyhow::Result<bool> {
     })
 }
 
-#[derive(Default)]
-struct ComWrapper {
-    _ptr: PhantomData<*mut ()>,
+struct CachedFrame {
+    resource: Option<(ID3D11Texture2D, ID3D11ShaderResourceView)>,
+    valid: bool
 }
 
-thread_local!(static COM_INITIALIZED: ComWrapper = {
-    unsafe {
-        SetProcessDpiAwarenessContext(Some(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2));
-        CoInitializeEx(None, COINIT_MULTITHREADED)
-            .expect("Could not initialize COM");
-        let thread = std::thread::current();
-        log::trace!("Initialized COM on thread \"{}\"", thread.name().unwrap_or(""));
-        ComWrapper::default()
-    }
-});
+impl CachedFrame {
 
-impl Drop for ComWrapper {
-    fn drop(&mut self) {
-        unsafe {
-            CoUninitialize();
-            let thread = std::thread::current();
-            log::trace!("Uninitialized COM on thread \"{}\"", thread.name().unwrap_or(""));
+    fn new() -> Self {
+        Self {
+            resource: None,
+            valid: false,
         }
     }
-}
 
-#[inline]
-pub fn com_initialized() {
-    COM_INITIALIZED.with(|_| {});
+    fn get_view(&self) -> Option<&ID3D11ShaderResourceView> {
+        match self.valid {
+            true => self.resource.as_ref().map(|r| &r.1),
+            false => None
+        }
+    }
+
+    fn invalidate(&mut self) {
+        self.valid = false;
+    }
+
+    fn update(&mut self, device: &ID3D11Device, context: &ID3D11DeviceContext4, frame: &ID3D11Texture2D) {
+        let frame_desc = retrieve(frame, ID3D11Texture2D::GetDesc);
+        self.valid = true;
+        let recreate = match &self.resource {
+            None => true,
+            Some((cache, _)) => {
+                let cache_desc = retrieve(cache, ID3D11Texture2D::GetDesc);
+                frame_desc.Width != cache_desc.Width ||
+                    frame_desc.Height != cache_desc.Height ||
+                    frame_desc.Format != cache_desc.Format
+            }
+        };
+        if recreate {
+            log::trace!("Creating new cache texture {}x{}", frame_desc.Width, frame_desc.Height);
+            let tex = make_resource(|ptr| unsafe {
+                device.CreateTexture2D(&D3D11_TEXTURE2D_DESC {
+                    MipLevels: 1,
+                    ArraySize: 1,
+                    SampleDesc: DXGI_SAMPLE_DESC {
+                        Count: 1,
+                        Quality: 0,
+                    },
+                    Usage: D3D11_USAGE_DEFAULT,
+                    BindFlags: D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET,
+                    CPUAccessFlags: Default::default(),
+                    MiscFlags: Default::default(),
+                    ..frame_desc
+                }, None, ptr)
+            }).log_ok("Failed to create new texture");
+            let srv = tex.as_ref().and_then(|tex|
+                make_resource(|ptr| unsafe {
+                    device.CreateShaderResourceView(tex, None, ptr)
+                }).log_ok("Failed to create new shader resource view"));
+            self.resource = tex.zip(srv);
+        }
+        if let Some((cache, _)) = &self.resource {
+            unsafe {
+                context.CopyResource(cache, frame);
+            }
+        }
+    }
+
 }
