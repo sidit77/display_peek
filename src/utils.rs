@@ -20,8 +20,7 @@ pub fn convert_u16_to_string(data: &[u16]) -> String {
 }
 
 pub fn make_blend_state(device: &ID3D11Device, src: D3D11_BLEND, dst: D3D11_BLEND) -> Result<ID3D11BlendState> {
-    Ok(unsafe {
-        let mut blend_state = std::mem::zeroed();
+    make_resource(|ptr| unsafe {
         device.CreateBlendState(&D3D11_BLEND_DESC {
             RenderTarget: [D3D11_RENDER_TARGET_BLEND_DESC {
                 BlendEnable: TRUE,
@@ -35,17 +34,28 @@ pub fn make_blend_state(device: &ID3D11Device, src: D3D11_BLEND, dst: D3D11_BLEN
             }; 8],
             IndependentBlendEnable: FALSE,
             AlphaToCoverageEnable: FALSE
-        }, Some(&mut blend_state))?;
-        blend_state.some()?
+        }, ptr)
     })
 }
 
 pub fn make_shader_resource_view<T: Into<InParam<ID3D11Resource>>>(device: &ID3D11Device, resource: T) -> Result<ID3D11ShaderResourceView> {
-    Ok(unsafe {
-        let mut view = std::mem::zeroed();
-        device.CreateShaderResourceView(resource, None, Some(&mut view))?;
-        view.some()?
+    make_resource(|ptr| unsafe {
+        device.CreateShaderResourceView(resource, None, ptr)
     })
+}
+
+pub fn make_resource<T>(func: impl FnOnce(Option<*mut Option<T>>) -> windows::core::Result<()>) -> anyhow::Result<T> {
+    let mut obj = None;
+    func(Some(&mut obj))?;
+    Ok(obj.some()?)
+}
+
+pub fn retrieve<S, T>(self_type: &S, func: unsafe fn(&S, *mut T)) -> T {
+    unsafe {
+        let mut desc = std::mem::MaybeUninit::zeroed();
+        func(self_type, desc.as_mut_ptr());
+        desc.assume_init()
+    }
 }
 
 pub fn show_message_box<T1: Into<HSTRING>, T2: Into<HSTRING>>(title: T1, msg: T2) where {

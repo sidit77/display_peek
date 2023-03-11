@@ -1,11 +1,10 @@
 use std::ffi::c_void;
 use std::mem::size_of;
 use anyhow::Result;
-use error_tools::SomeOptionExt;
 use windows::Win32::Graphics::Direct3D11::{D3D11_BIND_RENDER_TARGET, D3D11_BIND_SHADER_RESOURCE, D3D11_CPU_ACCESS_FLAG, D3D11_RESOURCE_MISC_GENERATE_MIPS, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT, ID3D11Device, ID3D11DeviceContext4, ID3D11ShaderResourceView, ID3D11Texture2D};
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SAMPLE_DESC};
 use crate::directx::{CursorData, CursorType};
-use crate::utils::U8Iter;
+use crate::utils::{make_resource, U8Iter};
 
 pub struct CursorSprite {
     pub valid: bool,
@@ -122,8 +121,7 @@ fn bgra_to_rgba(bytes: &[u8]) -> impl Iterator<Item=u32> + '_ {
 }
 
 fn make_texture(device: &ID3D11Device, width: u32, height: u32) -> Result<(ID3D11Texture2D, ID3D11ShaderResourceView)> {
-    let tex = unsafe {
-        let mut tex = std::mem::zeroed();
+    let tex = make_resource(|ptr| unsafe {
         device.CreateTexture2D(&D3D11_TEXTURE2D_DESC {
             Width: width,
             Height: height,
@@ -138,13 +136,10 @@ fn make_texture(device: &ID3D11Device, width: u32, height: u32) -> Result<(ID3D1
             BindFlags: D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET,
             CPUAccessFlags: D3D11_CPU_ACCESS_FLAG(0),
             MiscFlags: D3D11_RESOURCE_MISC_GENERATE_MIPS,
-        }, None, Some(&mut tex))?;
-        tex.some()?
-    };
-    let srv = unsafe {
-        let mut srv = std::mem::zeroed();
-        device.CreateShaderResourceView(&tex, None, Some(&mut srv))?;
-        srv.some()?
-    };
+        }, None, ptr)
+    })?;
+    let srv = make_resource(|ptr| unsafe {
+        device.CreateShaderResourceView(&tex, None, ptr)
+    })?;
     Ok((tex, srv))
 }

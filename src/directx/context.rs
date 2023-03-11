@@ -10,6 +10,7 @@ use windows::Win32::Graphics::DirectComposition::*;
 use windows::Win32::Graphics::Dxgi::*;
 use windows::Win32::Graphics::Dxgi::Common::*;
 use crate::directx::Adapter;
+use crate::utils::make_resource;
 
 pub struct Direct3D {
     pub device: ID3D11Device,
@@ -80,12 +81,10 @@ impl Direct3D {
            (device, target, visual)
        };
 
-        let rtv = unsafe {
+        let rtv = make_resource(|ptr| unsafe {
             let buffer = swap_chain.GetBuffer::<ID3D11Texture2D>(0)?;
-            let mut target = std::mem::zeroed();
-            d3d_device.CreateRenderTargetView(&buffer, None, Some(&mut target))?;
-            target.some()?
-        };
+            d3d_device.CreateRenderTargetView(&buffer, None, ptr)
+        })?;
 
         Ok(Self {
             device: d3d_device,

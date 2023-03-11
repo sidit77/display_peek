@@ -1,5 +1,5 @@
 use std::cell::{RefCell};
-use std::mem::{size_of, zeroed};
+use std::mem::size_of;
 use std::ops::DerefMut;
 use anyhow::{Context, ensure, Result};
 use tao::event_loop::{EventLoop, EventLoopProxy};
@@ -26,7 +26,7 @@ fn get_monitor_info(monitor: HMONITOR) -> Option<MONITORINFO> {
     unsafe {
         let mut info = MONITORINFO{
             cbSize: size_of::<MONITORINFO>() as u32,
-            ..zeroed()
+            ..Default::default()
         };
         match GetMonitorInfoW(monitor, &mut info) {
             TRUE => Some(info),
@@ -73,7 +73,7 @@ impl Drop for CursorTrackerHandle {
 
 fn get_current_monitor_sys() -> Option<HMONITOR> {
     unsafe {
-        let mut pt = zeroed();
+        let mut pt = POINT::default();
         match GetCursorPos(&mut pt) {
             TRUE => Some(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST)),
             _ => None

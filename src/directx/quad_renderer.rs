@@ -1,11 +1,11 @@
 use std::mem::size_of;
 use windows::Win32::Graphics::Direct3D11::{D3D11_APPEND_ALIGNED_ELEMENT, D3D11_BIND_CONSTANT_BUFFER, D3D11_BIND_INDEX_BUFFER, D3D11_BIND_VERTEX_BUFFER, D3D11_BUFFER_DESC, D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_INPUT_ELEMENT_DESC, D3D11_INPUT_PER_VERTEX_DATA, D3D11_SAMPLER_DESC, D3D11_SUBRESOURCE_DATA, D3D11_TEXTURE_ADDRESS_CLAMP, D3D11_USAGE_DEFAULT, ID3D11Buffer, ID3D11InputLayout, ID3D11PixelShader, ID3D11SamplerState, ID3D11ShaderResourceView, ID3D11VertexShader};
 use anyhow::Result;
-use error_tools::SomeOptionExt;
 use glam::Mat4;
 use windows::Win32::Graphics::Direct3D::D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_R32_UINT, DXGI_FORMAT_R32G32_FLOAT, DXGI_FORMAT_R32G32B32_FLOAT};
 use crate::directx::Direct3D;
+use crate::utils::make_resource;
 
 #[repr(C)]
 struct Vertex {
@@ -41,8 +41,7 @@ pub struct QuadRenderer {
 impl QuadRenderer {
 
     pub fn new(d3d: &Direct3D) -> Result<Self>{
-        let vertex_buffer = unsafe {
-            let mut buffer = std::mem::zeroed();
+        let vertex_buffer = make_resource(|ptr| unsafe {
             d3d.device.CreateBuffer(
                 &D3D11_BUFFER_DESC {
                     ByteWidth: size_of::<[Vertex; 4]>() as _,
@@ -54,12 +53,10 @@ impl QuadRenderer {
                     pSysMem: VERTICES.as_ptr() as _,
                     ..Default::default()
                 }),
-                Some(&mut buffer)
-            )?;
-            buffer.some()?
-        };
-        let index_buffer = unsafe {
-            let mut buffer = std::mem::zeroed();
+                ptr
+            )
+        })?;
+        let index_buffer = make_resource(|ptr| unsafe {
             d3d.device.CreateBuffer(
                 &D3D11_BUFFER_DESC {
                     ByteWidth: size_of::<[u32; 6]>() as _,
@@ -71,68 +68,56 @@ impl QuadRenderer {
                     pSysMem: INDICES.as_ptr() as _,
                     ..Default::default()
                 }),
-                Some(&mut buffer)
-            )?;
-            buffer.some()?
-        };
+                ptr
+            )
+        })?;
 
-        let (vs, ps, input_layout) = unsafe {
-            let vs_blob = include_bytes!(concat!(env!("OUT_DIR"), "/shader.vs_blob"));
-            let ps_blob = include_bytes!(concat!(env!("OUT_DIR"), "/shader.ps_blob"));
-            let vs = {
-                let mut shader = std::mem::zeroed();
-                d3d.device.CreateVertexShader(vs_blob, None, Some(&mut shader))?;
-                shader.some()?
-            };
-            let ps = {
-                let mut shader = std::mem::zeroed();
-                d3d.device.CreatePixelShader(ps_blob, None,Some(&mut shader))?;
-                shader.some()?
-            };
-            let descs = [
-                D3D11_INPUT_ELEMENT_DESC {
-                    SemanticName: windows::s!("POSITION"),
-                    SemanticIndex: 0,
-                    Format: DXGI_FORMAT_R32G32B32_FLOAT,
-                    InputSlot: 0,
-                    AlignedByteOffset: 0,
-                    InputSlotClass: D3D11_INPUT_PER_VERTEX_DATA,
-                    InstanceDataStepRate: 0,
-                },
-                D3D11_INPUT_ELEMENT_DESC {
-                    SemanticName: windows::s!("TEXCOORD"),
-                    SemanticIndex: 0,
-                    Format: DXGI_FORMAT_R32G32_FLOAT,
-                    InputSlot: 0,
-                    AlignedByteOffset: D3D11_APPEND_ALIGNED_ELEMENT,
-                    InputSlotClass: D3D11_INPUT_PER_VERTEX_DATA,
-                    InstanceDataStepRate: 0,
-                },
-            ];
-            let input_layout = {
-                let mut layout = std::mem::zeroed();
-                d3d.device.CreateInputLayout(&descs, vs_blob, Some(&mut layout))?;
-                layout.some()?
-            };
-            (vs, ps, input_layout)
-        };
 
-        let constant_buffer = unsafe {
-            let mut buffer = std::mem::zeroed();
+        let vs_blob = include_bytes!(concat!(env!("OUT_DIR"), "/shader.vs_blob"));
+        let ps_blob = include_bytes!(concat!(env!("OUT_DIR"), "/shader.ps_blob"));
+        let vs = make_resource(|ptr| unsafe {
+            d3d.device.CreateVertexShader(vs_blob, None, ptr)
+        })?;
+        let ps = make_resource(|ptr| unsafe {
+            d3d.device.CreatePixelShader(ps_blob, None,ptr)
+        })?;
+        let descs = [
+            D3D11_INPUT_ELEMENT_DESC {
+                SemanticName: windows::s!("POSITION"),
+                SemanticIndex: 0,
+                Format: DXGI_FORMAT_R32G32B32_FLOAT,
+                InputSlot: 0,
+                AlignedByteOffset: 0,
+                InputSlotClass: D3D11_INPUT_PER_VERTEX_DATA,
+                InstanceDataStepRate: 0,
+            },
+            D3D11_INPUT_ELEMENT_DESC {
+                SemanticName: windows::s!("TEXCOORD"),
+                SemanticIndex: 0,
+                Format: DXGI_FORMAT_R32G32_FLOAT,
+                InputSlot: 0,
+                AlignedByteOffset: D3D11_APPEND_ALIGNED_ELEMENT,
+                InputSlotClass: D3D11_INPUT_PER_VERTEX_DATA,
+                InstanceDataStepRate: 0,
+            },
+        ];
+        let input_layout = make_resource(|ptr| unsafe {
+            d3d.device.CreateInputLayout(&descs, vs_blob, ptr)
+        })?;
+
+        let constant_buffer = make_resource(|ptr| unsafe {
             d3d.device.CreateBuffer(&D3D11_BUFFER_DESC {
-                    ByteWidth: size_of::<Mat4>() as _,
-                    Usage: D3D11_USAGE_DEFAULT,
-                    BindFlags: D3D11_BIND_CONSTANT_BUFFER,
-                    ..Default::default()
-                },
-                None,
-                Some(&mut buffer)
-            )?;
-            buffer.some()?
-        };
+                ByteWidth: size_of::<Mat4>() as _,
+                Usage: D3D11_USAGE_DEFAULT,
+                BindFlags: D3D11_BIND_CONSTANT_BUFFER,
+                ..Default::default()
+            },
+            None,
+            ptr
+            )
+        })?;
 
-        let sampler = unsafe {
-            let mut sampler = std::mem::zeroed();
+        let sampler = make_resource(|ptr| unsafe {
             d3d.device.CreateSamplerState(&D3D11_SAMPLER_DESC {
                 Filter: D3D11_FILTER_MIN_MAG_MIP_LINEAR,
                 AddressU: D3D11_TEXTURE_ADDRESS_CLAMP,
@@ -143,9 +128,8 @@ impl QuadRenderer {
                 MaxAnisotropy: 1,
                 MipLODBias: 0.0,
                 ..Default::default()
-            }, Some(&mut sampler))?;
-            sampler.some()?
-        };
+            }, ptr)
+        })?;
 
         Ok(Self {
             vertex_buffer,
