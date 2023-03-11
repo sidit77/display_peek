@@ -4,17 +4,21 @@ use error_tools::SomeOptionExt;
 use tao::platform::windows::WindowExtWindows;
 use tao::window::Window;
 use windows::core::Interface;
-use windows::Win32::Foundation::HWND;
+use windows::Win32::Foundation::{FALSE, HWND, TRUE};
 use windows::Win32::Graphics::Direct3D::{D3D_DRIVER_TYPE_UNKNOWN, D3D_FEATURE_LEVEL_11_1};
-use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, DXGI_SCALING_NONE, DXGI_SWAP_CHAIN_DESC1, DXGI_SWAP_EFFECT_FLIP_DISCARD, DXGI_USAGE_RENDER_TARGET_OUTPUT, IDXGIFactory2, IDXGISwapChain1};
-use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_UNKNOWN, DXGI_SAMPLE_DESC};
+use windows::Win32::Graphics::DirectComposition::*;
+use windows::Win32::Graphics::Dxgi::*;
+use windows::Win32::Graphics::Dxgi::Common::*;
 use crate::directx::Adapter;
 
 pub struct Direct3D {
     pub device: ID3D11Device,
     pub context: ID3D11DeviceContext4,
     pub swap_chain: IDXGISwapChain1,
-    render_target: Option<ID3D11RenderTargetView>
+    render_target: Option<ID3D11RenderTargetView>,
+    _comp_device: IDCompositionDevice,
+    _comp_target: IDCompositionTarget,
+    _comp_visual: IDCompositionVisual,
 }
 
 impl Direct3D {
@@ -38,30 +42,43 @@ impl Direct3D {
         let d3d_device = d3d_device.some()?;
         let d3d_ctx = d3d_ctx.some()?.cast::<ID3D11DeviceContext4>()?;
 
+        let dxgi_device: IDXGIDevice = d3d_device.cast()?;
+
+
         let dxgi_factory = unsafe { CreateDXGIFactory1::<IDXGIFactory2>()? };
         let window_size = window.inner_size();
-        let swap_chain = unsafe {
-            dxgi_factory.CreateSwapChainForHwnd(
-                &d3d_device,
-                HWND(window.hwnd() as _),
-                &DXGI_SWAP_CHAIN_DESC1 {
-                    Width: window_size.width,
-                    Height: window_size.height,
-                    Format: DXGI_FORMAT_R8G8B8A8_UNORM,
-                    BufferCount: 2,
-                    BufferUsage: DXGI_USAGE_RENDER_TARGET_OUTPUT,
-                    SwapEffect: DXGI_SWAP_EFFECT_FLIP_DISCARD,
-                    Scaling: DXGI_SCALING_NONE,
-                    SampleDesc: DXGI_SAMPLE_DESC {
-                        Count: 1,
-                        Quality: 0,
-                    },
-                    ..Default::default()
-                },
-                None,
-                None,
-            )?
+        let desc = DXGI_SWAP_CHAIN_DESC1 {
+            Width: window_size.width,
+            Height: window_size.height,
+            Format: DXGI_FORMAT_R8G8B8A8_UNORM,
+            Stereo: FALSE,
+            SampleDesc: DXGI_SAMPLE_DESC {
+                Count: 1,
+                Quality: 0,
+            },
+            BufferUsage: DXGI_USAGE_RENDER_TARGET_OUTPUT,
+            BufferCount: 2,
+            Scaling: DXGI_SCALING_STRETCH,
+            SwapEffect: DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL,
+            AlphaMode: DXGI_ALPHA_MODE_PREMULTIPLIED,
+            Flags: 0,
         };
+
+        let swap_chain = unsafe {
+            dxgi_factory.CreateSwapChainForComposition(&dxgi_device, &desc, None)?
+            //dxgi_factory.CreateSwapChainForHwnd(&d3d_device, HWND(window.hwnd() as _), &desc, None, None)?
+        };
+
+
+       let (comp_device, comp_target, comp_visual) = unsafe {
+           let device: IDCompositionDevice = DCompositionCreateDevice(&dxgi_device)?;
+           let target: IDCompositionTarget = device.CreateTargetForHwnd(HWND(window.hwnd() as _), TRUE)?;
+           let visual: IDCompositionVisual = device.CreateVisual()?;
+           visual.SetContent(&swap_chain)?;
+           target.SetRoot(&visual)?;
+           device.Commit()?;
+           (device, target, visual)
+       };
 
         let rtv = unsafe {
             let buffer = swap_chain.GetBuffer::<ID3D11Texture2D>(0)?;
@@ -75,6 +92,9 @@ impl Direct3D {
             context: d3d_ctx,
             swap_chain,
             render_target: Some(rtv),
+            _comp_device: comp_device,
+            _comp_target: comp_target,
+            _comp_visual: comp_visual,
         })
     }
 

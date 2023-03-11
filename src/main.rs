@@ -11,15 +11,14 @@ use std::ops::Add;
 use std::time::{Duration, Instant};
 use std::marker::PhantomData;
 use anyhow::Context;
-use error_tools::gui::set_gui_panic_hook;
 use error_tools::log::LogResultExt;
 use error_tools::tao::EventLoopExtRunResult;
 use glam::{Mat4, Quat, vec3};
 use log::LevelFilter;
 use windows::Win32::Graphics::Gdi::HMONITOR;
 use tao::{event::*, event_loop::*, window::*};
-use tao::platform::windows::{WindowBuilderExtWindows, WindowExtWindows};
-use windows::Win32::Graphics::Direct3D11::{D3D11_BLEND_INV_DEST_COLOR, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_INV_SRC_COLOR, D3D11_BLEND_ONE, D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_SRC_COLOR, D3D11_BLEND_ZERO, D3D11_VIEWPORT};
+use tao::platform::windows::{WindowBuilderExtWindows};
+use windows::Win32::Graphics::Direct3D11::*;
 use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx, CoUninitialize};
 use windows::Win32::UI::HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext};
 use crate::config::Config;
@@ -36,7 +35,8 @@ pub enum CustomEvent {
 }
 
 fn main() -> anyhow::Result<()> {
-    set_gui_panic_hook();
+    #[cfg(not(debug_assertions))]
+    error_tools::gui::set_gui_panic_hook();
 
     env_logger::builder()
         .filter_level(LevelFilter::Trace)
@@ -68,7 +68,8 @@ fn run() -> anyhow::Result<bool> {
         .with_decorations(false)
         .with_always_on_top(true)
         .with_skip_taskbar(true)
-        .with_undecorated_shadow(true)
+        //.with_undecorated_shadow(true)
+        .with_no_redirection_bitmap(true)
         .build(&event_loop)?;
     window.set_ignore_cursor_events(true)?;
     let system_tray = create_system_tray(&event_loop)?;
@@ -126,7 +127,7 @@ fn run() -> anyhow::Result<bool> {
                                 -1.0,
                                 1.0);
 
-                            d3d.context.ClearRenderTargetView(d3d.render_target(), [0.0, 0.0, 0.3, 1.0].as_ptr());
+                            d3d.context.ClearRenderTargetView(d3d.render_target(), [0.0, 0.0, 0.3, 0.5].as_ptr());
 
                             d3d.context.RSSetViewports(Some(&[D3D11_VIEWPORT {
                                 Width: window_size.width as f32,
@@ -270,7 +271,7 @@ fn run() -> anyhow::Result<bool> {
                 d3d.resize(size.width, size.height)
                     .log_ok("Can not resize resources");
                 log::trace!("Resized dx resources to {}/{}", size.width, size.height);
-                window.set_undecorated_shadow(true);
+                //window.set_undecorated_shadow(true);
             }
             Event::LoopDestroyed => {
                 window.set_visible(false);
