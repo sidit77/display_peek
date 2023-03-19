@@ -121,7 +121,7 @@ impl Iterator for U8Iter {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (u8::BITS as usize, Some(u8::BITS as usize))
+        (self.size as usize, Some(self.size as usize))
     }
 }
 
